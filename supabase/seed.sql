@@ -43,14 +43,14 @@ $$;
 
 -- 1. Faixa salarial, híbrido, com área secundária.
 insert into public.vagas (
-  empresa_id, origem, cargo, area_principal_id, areas_secundarias, nivel_id, contrato_id,
-  modalidade_id, cidade_id, atividades, requisitos, link_candidatura, encerra_em,
+  empresa_id, origem, cargo, area_principal_id, areas_secundarias, niveis, contratos,
+  modalidades, cidade_id, atividades, requisitos, link_candidatura, encerra_em,
   salario_min, salario_max, beneficios, fonte, conferida_em
 ) values (
   '00000000-0000-4000-8000-000000000001', 'curada', 'Desenvolvedor Full Stack Pleno',
   pg_temp.id_de('areas', 'desenvolvimento'), array[pg_temp.id_de('areas', 'banco-de-dados')],
-  pg_temp.id_de('niveis', 'pleno'), pg_temp.id_de('contratos', 'clt'),
-  pg_temp.id_de('modalidades', 'hibrido'), pg_temp.id_de('cidades', 'pato-branco'),
+  array[pg_temp.id_de('niveis', 'pleno')], array[pg_temp.id_de('contratos', 'clt')],
+  array[pg_temp.id_de('modalidades', 'hibrido')], pg_temp.id_de('cidades', 'pato-branco'),
   E'Desenvolver e manter sistemas web.\nParticipar das reuniões de planejamento.',
   'Experiência com TypeScript, React e PostgreSQL; Git no dia a dia',
   'https://exemplo.com.br/vagas/full-stack',
@@ -61,13 +61,13 @@ insert into public.vagas (
 
 -- 2. Remota, salário a combinar.
 insert into public.vagas (
-  empresa_id, origem, cargo, area_principal_id, nivel_id, contrato_id,
-  modalidade_id, cidade_id, atividades, requisitos, link_candidatura, encerra_em,
+  empresa_id, origem, cargo, area_principal_id, niveis, contratos,
+  modalidades, cidade_id, atividades, requisitos, link_candidatura, encerra_em,
   salario_a_combinar, publicada_em
 ) values (
   '00000000-0000-4000-8000-000000000001', 'curada', 'Analista de Suporte Júnior',
-  pg_temp.id_de('areas', 'suporte-tecnico-e-help-desk'), pg_temp.id_de('niveis', 'junior'),
-  pg_temp.id_de('contratos', 'clt'), pg_temp.id_de('modalidades', 'remoto'),
+  pg_temp.id_de('areas', 'suporte-tecnico-e-help-desk'), array[pg_temp.id_de('niveis', 'junior')],
+  array[pg_temp.id_de('contratos', 'clt')], array[pg_temp.id_de('modalidades', 'remoto')],
   pg_temp.id_de('cidades', 'francisco-beltrao'),
   'Atender chamados de clientes por telefone e e-mail.',
   'Conhecimento em Windows e redes. Boa comunicação.',
@@ -76,34 +76,39 @@ insert into public.vagas (
   true, now() - interval '1 day'
 );
 
--- 3. Estágio presencial, só salário mínimo, PcD, publicada há 10 dias (sem selo "Nova").
+-- 3. Estágio presencial ou híbrido, só salário mínimo, PcD, publicada há 10
+-- dias (sem selo "Nova"). Curada sem nível e sem prazo informado: o site
+-- mostra "Prazo não informado" no lugar da data.
 insert into public.vagas (
-  empresa_id, origem, cargo, area_principal_id, nivel_id, contrato_id,
-  modalidade_id, cidade_id, atividades, requisitos, link_candidatura, encerra_em,
-  salario_min, pcd, publicada_em
+  empresa_id, origem, cargo, area_principal_id, niveis, contratos,
+  modalidades, cidade_id, atividades, requisitos, link_candidatura, encerra_em,
+  prazo_informado, salario_min, pcd, publicada_em
 ) values (
   '00000000-0000-4000-8000-000000000002', 'curada', 'Estágio em Infraestrutura e Redes',
-  pg_temp.id_de('areas', 'infraestrutura-e-redes'), pg_temp.id_de('niveis', 'estagio'),
-  pg_temp.id_de('contratos', 'estagio-nao-obrigatorio'), pg_temp.id_de('modalidades', 'presencial'),
+  pg_temp.id_de('areas', 'infraestrutura-e-redes'), '{}',
+  array[pg_temp.id_de('contratos', 'estagio-nao-obrigatorio')],
+  array[pg_temp.id_de('modalidades', 'presencial'), pg_temp.id_de('modalidades', 'hibrido')],
   pg_temp.id_de('cidades', 'francisco-beltrao'),
   'Apoiar a equipe de infraestrutura na manutenção da rede e dos servidores.',
   'Estar cursando Redes, Sistemas de Informação ou área afim.',
   'https://cooperativa.exemplo.com.br/trabalhe-conosco',
   (now() at time zone 'America/Sao_Paulo')::date + 15,
-  1200, true, now() - interval '10 days'
+  false, 1200, true, now() - interval '10 days'
 );
 
--- 4. Sênior PJ, só salário máximo, duas áreas secundárias, passos e observação.
+-- 4. Pleno ou Sênior, CLT ou PJ, só salário máximo, duas áreas secundárias,
+-- passos e observação.
 insert into public.vagas (
-  empresa_id, origem, cargo, area_principal_id, areas_secundarias, nivel_id, contrato_id,
-  modalidade_id, cidade_id, atividades, requisitos, link_candidatura, encerra_em,
+  empresa_id, origem, cargo, area_principal_id, areas_secundarias, niveis, contratos,
+  modalidades, cidade_id, atividades, requisitos, link_candidatura, encerra_em,
   salario_max, beneficios, como_se_candidatar, observacao, publicada_em
 ) values (
   '00000000-0000-4000-8000-000000000003', 'curada', 'Cientista de Dados Sênior',
   pg_temp.id_de('areas', 'dados-e-bi'),
   array[pg_temp.id_de('areas', 'inteligencia-artificial'), pg_temp.id_de('areas', 'cloud-e-devops')],
-  pg_temp.id_de('niveis', 'senior'), pg_temp.id_de('contratos', 'pj'),
-  pg_temp.id_de('modalidades', 'presencial'), pg_temp.id_de('cidades', 'dois-vizinhos'),
+  array[pg_temp.id_de('niveis', 'pleno'), pg_temp.id_de('niveis', 'senior')],
+  array[pg_temp.id_de('contratos', 'clt'), pg_temp.id_de('contratos', 'pj')],
+  array[pg_temp.id_de('modalidades', 'presencial')], pg_temp.id_de('cidades', 'dois-vizinhos'),
   E'- Criar modelos de previsão de safra\n- Montar painéis para os clientes',
   E'- Python e SQL avançados\n- Experiência com aprendizado de máquina',
   'https://agro.exemplo.com.br/vagas/cientista-de-dados',
@@ -116,12 +121,12 @@ insert into public.vagas (
 
 -- 5. Remota sem salário (o destaque amarelo vira "Inscrições até").
 insert into public.vagas (
-  empresa_id, origem, cargo, area_principal_id, nivel_id, contrato_id,
-  modalidade_id, cidade_id, atividades, requisitos, link_candidatura, encerra_em, publicada_em
+  empresa_id, origem, cargo, area_principal_id, niveis, contratos,
+  modalidades, cidade_id, atividades, requisitos, link_candidatura, encerra_em, publicada_em
 ) values (
   '00000000-0000-4000-8000-000000000004', 'curada', 'Analista de Segurança da Informação Pleno',
-  pg_temp.id_de('areas', 'seguranca-da-informacao'), pg_temp.id_de('niveis', 'pleno'),
-  pg_temp.id_de('contratos', 'clt'), pg_temp.id_de('modalidades', 'remoto'),
+  pg_temp.id_de('areas', 'seguranca-da-informacao'), array[pg_temp.id_de('niveis', 'pleno')],
+  array[pg_temp.id_de('contratos', 'clt')], array[pg_temp.id_de('modalidades', 'remoto')],
   pg_temp.id_de('cidades', 'pato-branco'),
   'Monitorar incidentes e cuidar das políticas de acesso.',
   'Conhecimento em firewall, SIEM e LGPD.',
@@ -132,12 +137,12 @@ insert into public.vagas (
 
 -- 6. Candidatura por e-mail (link mailto:).
 insert into public.vagas (
-  empresa_id, origem, cargo, area_principal_id, nivel_id, contrato_id,
-  modalidade_id, cidade_id, atividades, requisitos, link_candidatura, encerra_em, publicada_em
+  empresa_id, origem, cargo, area_principal_id, niveis, contratos,
+  modalidades, cidade_id, atividades, requisitos, link_candidatura, encerra_em, publicada_em
 ) values (
   '00000000-0000-4000-8000-000000000004', 'curada', 'Analista de Testes (QA) Júnior',
-  pg_temp.id_de('areas', 'qualidade-e-testes-qa'), pg_temp.id_de('niveis', 'junior'),
-  pg_temp.id_de('contratos', 'clt'), pg_temp.id_de('modalidades', 'hibrido'),
+  pg_temp.id_de('areas', 'qualidade-e-testes-qa'), array[pg_temp.id_de('niveis', 'junior')],
+  array[pg_temp.id_de('contratos', 'clt')], array[pg_temp.id_de('modalidades', 'hibrido')],
   pg_temp.id_de('cidades', 'pato-branco'),
   'Escrever e rodar testes dos sistemas da empresa.',
   'Noções de testes automatizados.',
@@ -149,13 +154,13 @@ insert into public.vagas (
 -- 7. Vaga que saiu do ar (encerrada pela empresa): o link mostra o aviso
 -- "Esta vaga não está mais no ar".
 insert into public.vagas (
-  empresa_id, origem, status, slug, cargo, area_principal_id, nivel_id, contrato_id,
-  modalidade_id, cidade_id, atividades, requisitos, link_candidatura, encerra_em
+  empresa_id, origem, status, slug, cargo, area_principal_id, niveis, contratos,
+  modalidades, cidade_id, atividades, requisitos, link_candidatura, encerra_em
 ) values (
   '00000000-0000-4000-8000-000000000001', 'curada', 'encerrada_empresa',
   'desenvolvedor-mobile-empresa-exemplo-pato-branco', 'Desenvolvedor Mobile',
-  pg_temp.id_de('areas', 'desenvolvimento'), pg_temp.id_de('niveis', 'pleno'),
-  pg_temp.id_de('contratos', 'clt'), pg_temp.id_de('modalidades', 'presencial'),
+  pg_temp.id_de('areas', 'desenvolvimento'), array[pg_temp.id_de('niveis', 'pleno')],
+  array[pg_temp.id_de('contratos', 'clt')], array[pg_temp.id_de('modalidades', 'presencial')],
   pg_temp.id_de('cidades', 'pato-branco'),
   'Desenvolver aplicativos.', 'Flutter.',
   'https://exemplo.com.br/vagas/mobile',
