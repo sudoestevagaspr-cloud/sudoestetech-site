@@ -48,6 +48,17 @@ begin
 end;
 $$;
 
+-- Entra como o servidor do site (chave secreta, papel service_role).
+create or replace function pg_temp.como_servidor()
+returns void
+language plpgsql
+as $$
+begin
+  perform set_config('role', 'service_role', true);
+  perform set_config('request.jwt.claims', '{"role": "service_role"}', true);
+end;
+$$;
+
 -- Volta a ser o próprio banco (sem travas), para preparar e conferir dados.
 create or replace function pg_temp.como_sistema()
 returns void
@@ -144,6 +155,14 @@ begin
      where s.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity;
     r := r || pg_temp.resultado('Toda tabela do schema public tem RLS ligado', txt is null,
                                 'Tabelas sem RLS: ' || txt);
+
+    select string_agg(c.relname, ', ' order by c.relname) into txt
+      from pg_class c
+      join pg_namespace s on s.oid = c.relnamespace
+     where s.nspname = 'public' and c.relkind in ('r', 'v', 'm', 'p')
+       and not has_table_privilege('service_role', c.oid, 'select');
+    r := r || pg_temp.resultado('Toda tabela e visão do schema public tem GRANT para o servidor', txt is null,
+                                'Sem GRANT para service_role: ' || txt);
 
     -- Pega itens ativos das listas pela ordem, para o teste não depender
     -- dos nomes (o admin pode renomear).
@@ -656,6 +675,28 @@ begin
                                 n = 0 and n2 = 0 and msg is not null, msg);
 
     -- =================================================================
+    -- Servidor do site (chave secreta, service_role)
+    -- =================================================================
+    perform pg_temp.como_servidor();
+    select count(*) into n from public.vagas where empresa_id in (empresa_a, empresa_curada);
+    n2 := pg_temp.linhas(format('update public.empresas set descricao = ''Alterada pelo servidor'' where id = %L', empresa_a));
+    msg := pg_temp.erro('select count(*) from public.vagas_publicas');
+    r := r || pg_temp.resultado('Servidor (chave secreta) vê e altera dados de qualquer empresa, sem passar pelo RLS',
+                                n > 0 and n2 = 1 and msg is null,
+                                n || ' vagas vistas, ' || n2 || ' empresa alterada, vitrine: ' || coalesce(msg, 'ok'));
+
+    msg := pg_temp.erro(format('delete from public.vagas where id = %L', vaga_a2));
+    msg2 := pg_temp.erro(format('delete from public.empresas where id = %L', empresa_curada));
+    r := r || pg_temp.resultado('Servidor também não apaga vagas nem empresas',
+                                msg is not null and msg2 is not null, coalesce(msg, msg2));
+
+    msg := pg_temp.erro(format('insert into public.liberacoes_limite (empresa_id, limite, motivo) values (%L, 99, ''Teste'')', empresa_a));
+    msg2 := pg_temp.erro(format('update public.metricas_vaga_dia set visualizacoes = 999 where vaga_id = %L', vaga_a1));
+    txt := pg_temp.erro('select count(*) from public.liberacoes_limite');
+    r := r || pg_temp.resultado('Servidor só lê métricas e históricos (quem escreve neles é o próprio banco)',
+                                msg is not null and msg2 is not null and txt is null, coalesce(txt, msg, msg2));
+
+    -- =================================================================
     -- Logos no Storage
     -- =================================================================
     perform pg_temp.como_usuario(usuario_a);
@@ -684,6 +725,17 @@ begin
     select count(*) into n from public.usuarios where id = usuario_b;
     select count(*) into n2 from auth.users where id = usuario_b;
     r := r || pg_temp.resultado('Excluir a conta remove o login', n = 0 and n2 = 0);
+
+    -- =================================================================
+    -- Tabelas criadas no futuro
+    -- =================================================================
+    perform pg_temp.como_sistema();
+    create table public.teste_tabela_nova (id integer);
+    alter table public.teste_tabela_nova enable row level security;
+    r := r || pg_temp.resultado('Tabela nova não fica liberada para a API sem GRANT explícito',
+                                not has_table_privilege('anon', 'public.teste_tabela_nova', 'select, insert, update, delete')
+                                and not has_table_privilege('authenticated', 'public.teste_tabela_nova', 'select, insert, update, delete')
+                                and not has_table_privilege('service_role', 'public.teste_tabela_nova', 'select, insert, update, delete'));
 
     -- Fim: desfaz tudo o que os testes fizeram.
     raise exception using errcode = 'TT000';

@@ -117,7 +117,12 @@ Guia da Fase 1 para o Luan: `docs/fase-1-banco.md`.
 - **Schema `privado`**: funções auxiliares (não expostas na API). `privado.eh_admin()` exige login
   com duas etapas (`aal2` no token). `privado.minha_empresa_id()` devolve vazio se a empresa não está ativa.
 - **Toda tabela nova**: `enable row level security` logo após o `create table`, `grant` explícito
-  para `anon`/`authenticated` e políticas. Visitante não lê tabelas internas.
+  para `anon`/`authenticated`/`service_role` e políticas. Visitante não lê tabelas internas.
+  O projeto foi criado com a liberação automática de tabelas novas para a API desligada, e a
+  migration `20261123040900` faz o mesmo no banco local: sem `grant`, nem o servidor acessa a tabela.
+- **Projeto do Luan**: as migrations 1 a 9 foram aplicadas em 23/11/2026, provavelmente pelo SQL
+  Editor (o guia ensina colar cada arquivo, na ordem). Antes de usar `supabase db push` lá,
+  conferir com `supabase migration list` e marcar as já aplicadas com `supabase migration repair`.
 - **Travas por gatilho** (`t10_antes_de_gravar` em `empresas` e `vagas`): admin e empresa usam o
   mesmo papel `authenticated`, então quais colunas a empresa pode mudar é decidido no gatilho, por
   uma lista de colunas permitidas. `privado.tem_acesso_total()` = admin, service_role, SQL Editor ou

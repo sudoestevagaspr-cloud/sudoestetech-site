@@ -1,6 +1,6 @@
 # Fase 1: banco de dados e segurança
 
-O banco da v1 está pronto em `supabase/migrations/`, com Row Level Security (RLS) em todas as tabelas e 75 testes automáticos que conferem quem pode fazer o quê. Este guia mostra como aplicar no seu Supabase, como testar e por que as decisões principais foram tomadas.
+O banco da v1 está pronto em `supabase/migrations/`, com Row Level Security (RLS) em todas as tabelas e 80 testes automáticos que conferem quem pode fazer o quê. Este guia mostra como aplicar no seu Supabase, como testar e por que as decisões principais foram tomadas.
 
 ## Como as tabelas se ligam
 
@@ -45,12 +45,43 @@ Três ajustes apareceram ao implementar. Nenhum muda o que o sistema faz para vo
 
 ## Como aplicar no seu Supabase
 
-1. Crie um projeto em [supabase.com](https://supabase.com) (plano gratuito). Escolha a região São Paulo, que fica mais perto dos usuários.
-2. Aplique as migrations. Escolha um dos dois jeitos:
-    - **Pelo terminal (recomendado):** na pasta do projeto, rode `npm install`, depois `npx supabase login`, `npx supabase link --project-ref <id do projeto>` (o id está na URL do painel) e `npm run db:push`. O comando pede a senha do banco que você criou com o projeto.
-    - **Pelo painel:** abra o SQL Editor e rode cada arquivo de `supabase/migrations/` na ordem dos nomes, um por vez.
-3. Em **Authentication > Sign In / Providers**, desligue **Allow new users to sign up**. Ninguém cria conta sozinho: o admin convida a empresa depois de aprovar o pré-cadastro.
-4. Confira em **Authentication > Multi-Factor** que o **TOTP** (app autenticador) está ligado. Ele já vem ligado nos projetos novos.
+### 1. Criar o projeto
+
+1. Em [supabase.com](https://supabase.com), crie um projeto no plano gratuito, na região São Paulo, que fica mais perto dos usuários. Guarde a senha do banco num gerenciador de senhas, nunca num arquivo do repositório.
+2. Nas opções de segurança da criação, deixe a **Data API** ligada, ligue o **RLS automático** nas tabelas novas e deixe **desligada** a opção que libera as tabelas novas para a API sozinha. O banco já dá as permissões tabela por tabela, então uma tabela nova nunca fica exposta por esquecimento.
+
+### 2. Rodar os arquivos do banco no SQL Editor
+
+Os arquivos ficam na pasta [`supabase/migrations/`](../supabase/migrations/). Cada um monta uma parte do banco e roda **uma vez só, nesta ordem**:
+
+| # | Arquivo | O que cria |
+| --- | --- | --- |
+| 1 | [`20261123040000_base.sql`](../supabase/migrations/20261123040000_base.sql) | Schema `privado` e funções de apoio (datas, CNPJ, links) |
+| 2 | [`20261123040100_listas_fixas_e_planos.sql`](../supabase/migrations/20261123040100_listas_fixas_e_planos.sql) | Planos e listas fixas, já com os itens |
+| 3 | [`20261123040200_empresas_e_usuarios.sql`](../supabase/migrations/20261123040200_empresas_e_usuarios.sql) | Empresas, logins, pré-cadastros e históricos do limite |
+| 4 | [`20261123040300_vagas.sql`](../supabase/migrations/20261123040300_vagas.sql) | Vagas e as regras de status e de limite |
+| 5 | [`20261123040400_metricas_e_reports.sql`](../supabase/migrations/20261123040400_metricas_e_reports.sql) | Métricas por dia e denúncias |
+| 6 | [`20261123040500_funcoes_publicas.sql`](../supabase/migrations/20261123040500_funcoes_publicas.sql) | Funções que o site chama (publicar vaga, liberar limite, excluir conta, métricas) |
+| 7 | [`20261123040600_seguranca_rls.sql`](../supabase/migrations/20261123040600_seguranca_rls.sql) | Quem pode ler e gravar cada tabela (RLS) |
+| 8 | [`20261123040700_vitrine_publica.sql`](../supabase/migrations/20261123040700_vitrine_publica.sql) | A visão `vagas_publicas`, que o site público lê |
+| 9 | [`20261123040800_storage_logos.sql`](../supabase/migrations/20261123040800_storage_logos.sql) | A pasta de logos no Storage |
+| 10 | [`20261123040900_permissoes_do_servidor.sql`](../supabase/migrations/20261123040900_permissoes_do_servidor.sql) | Permissões da chave secreta do servidor |
+
+Para cada arquivo, na ordem:
+
+1. Clique no nome do arquivo na tabela acima. No GitHub, clique no botão de copiar (**Copy raw file**, dois quadradinhos no alto, à direita do código).
+2. No painel do Supabase, abra o **SQL Editor** no menu da esquerda e clique em **New query** (o **+** ao lado das abas).
+3. Cole com Ctrl+V e clique em **Run** (ou Ctrl+Enter).
+4. Deve aparecer **Success. No rows returned**. Se o Supabase mostrar um aviso de operação destrutiva (**destructive operation**), pode confirmar: ele aparece por causa de palavras como `delete` nas regras de segurança, e nada é apagado.
+
+Se algum arquivo der erro, pare e me mande a mensagem de erro. Rodar de novo um arquivo que já deu certo só dá erro de "already exists", sem estragar nada.
+
+**Pelo terminal (opcional, para mais tarde).** Dá para aplicar tudo de uma vez com `npx supabase link --project-ref <id do projeto>` e `npm run db:push`. Se você já rodou os arquivos pelo SQL Editor, não use o `db:push` antes de falar comigo: ele não sabe que os arquivos já foram aplicados e tentaria criar tudo de novo.
+
+### 3. Ajustes no painel
+
+1. Em **Authentication > Sign In / Providers**, desligue **Allow new users to sign up**. Ninguém cria conta sozinho: o admin convida a empresa depois de aprovar o pré-cadastro.
+2. Confira em **Authentication > Multi-Factor** que o **TOTP** (app autenticador) está ligado. Ele já vem ligado nos projetos novos.
 
 Não coloque a senha do banco nem as chaves do projeto em nenhum arquivo do repositório.
 
@@ -58,10 +89,10 @@ Não coloque a senha do banco nem as chaves do projeto em nenhum arquivo do repo
 
 ### Os testes automáticos
 
-No SQL Editor, cole o arquivo `supabase/tests/testes_seguranca.sql` inteiro e clique em **Run**. A primeira linha do resultado deve ser:
+Depois dos 10 arquivos, abra [`supabase/tests/testes_seguranca.sql`](../supabase/tests/testes_seguranca.sql), copie do mesmo jeito, cole numa query nova do SQL Editor e clique em **Run**. Aqui o aviso de operação destrutiva aparece com certeza (o teste tenta apagar vagas para conferir que é barrado); pode confirmar. A primeira linha do resultado deve ser:
 
 ```
-RESUMO: 75 de 75 testes passaram
+RESUMO: 80 de 80 testes passaram
 ```
 
 O script cria empresas, usuários e vagas de teste, "entra" como visitante, como empresa A, empresa B e admin, confere o que cada um consegue fazer e no final desfaz tudo. Nenhum dado de teste fica no banco. Se algum teste falhar, a coluna `detalhe` mostra o motivo.
@@ -74,6 +105,7 @@ Alguns exemplos do que ele confere:
 - suspender a empresa tira as vagas do ar na hora; reativar devolve as que estão no prazo, até o limite;
 - o admin só tem acesso de admin depois da verificação em duas etapas;
 - a vitrine não tem e-mail, telefone nem CNPJ;
+- o servidor (chave secreta) acessa tudo o que precisa, mas também não apaga vagas nem mexe nos históricos;
 - excluir a conta apaga e-mail e telefone, remove o login e mantém o nome nas vagas antigas.
 
 Também conferi tudo isso pela API de verdade do Supabase rodando aqui (login com senha, código do app autenticador, upload de logo pelo Storage): 36 de 36 verificações passaram.
@@ -126,6 +158,7 @@ O **Security Advisor** do painel deve mostrar o aviso **Security Definer View** 
 
 - **Regras no banco, não só nas telas.** A chave que o site usa é pública: qualquer pessoa consegue copiá-la do navegador e chamar a API direto. Por isso o RLS e os gatilhos garantem as regras mesmo sem passar pelo site.
 - **RLS ligado na criação de cada tabela, negando tudo.** Uma tabela sem política não aparece para ninguém. Se uma migration falhar no meio, nada fica exposto.
+- **Permissão (GRANT) explícita para cada papel.** São duas barreiras: o GRANT diz se o papel pode tocar na tabela, e o RLS filtra quais linhas. O projeto não dá GRANT sozinho para tabelas novas, então cada tabela recebe só o que cada papel precisa: `anon` (visitante), `authenticated` (empresa ou admin logado) e `service_role` (o servidor). A chave secreta ignora o RLS, mas sem GRANT nem ela entra.
 - **Schema `privado` para as funções auxiliares.** O Supabase publica na API tudo que está em `public`. As funções usadas pelas regras ficam em `privado`, que ninguém chama de fora.
 - **`publicar_vaga` captura o erro do limite.** Um erro desfaz tudo o que a operação fez, inclusive o registro de "bateu no limite". A função captura o erro, registra a tentativa e devolve a mensagem para a tela. O gatilho continua barrando qualquer outro caminho.
 - **Duas etapas exigidas pelo próprio banco.** O login com o código do app marca o token com `aal2`. As regras de admin conferem essa marca, então a senha sozinha não dá acesso de admin, nem pela API.
