@@ -1,5 +1,5 @@
 -- =====================================================================
--- Testes de segurança e regras do banco (Fase 1)
+-- Testes de segurança e regras do banco (Fases 1 e 2)
 -- =====================================================================
 --
 -- Como rodar no Supabase: abra o SQL Editor, cole este arquivo inteiro e
@@ -725,6 +725,66 @@ begin
     select count(*) into n from public.usuarios where id = usuario_b;
     select count(*) into n2 from auth.users where id = usuario_b;
     r := r || pg_temp.resultado('Excluir a conta remove o login', n = 0 and n2 = 0);
+
+    -- =================================================================
+    -- Aviso ao site (Fase 2)
+    -- =================================================================
+    -- Os pedidos ao site ficam na fila do pg_net (net.http_request_queue)
+    -- e só saem depois do commit. Como este script desfaz tudo no final,
+    -- nenhum pedido de teste chega a ser enviado. O endereço de teste
+    -- (.invalid) não existe na internet.
+    perform pg_temp.como_sistema();
+    perform privado.configurar_aviso_ao_site('https://site-teste.invalid/', repeat('s', 40));
+    -- Os comandos anteriores já avisaram nesta transação; zera a marca.
+    perform set_config('privado.site_avisado', '', true);
+
+    perform pg_temp.como_usuario(usuario_a);
+    n := pg_temp.linhas(format('update public.vagas set observacao = ''Aviso 1'' where id = %L', vaga_a2));
+
+    perform pg_temp.como_sistema();
+    select count(*) into n2 from net.http_request_queue
+     where url = 'https://site-teste.invalid/api/revalidar'
+       and method = 'POST'
+       and headers ->> 'Authorization' = 'Bearer ' || repeat('s', 40);
+    r := r || pg_temp.resultado('Empresa muda a vaga e o banco avisa o site, com o segredo no cabeçalho',
+                                n = 1 and n2 = 1, n || ' vaga alterada, ' || n2 || ' aviso(s) na fila');
+
+    perform pg_temp.como_usuario(usuario_a);
+    perform pg_temp.linhas(format('update public.vagas set observacao = ''Aviso 2'' where id = %L', vaga_a2));
+    perform pg_temp.como_sistema();
+    select count(*) into n2 from net.http_request_queue where url = 'https://site-teste.invalid/api/revalidar';
+    r := r || pg_temp.resultado('Vários comandos na mesma transação geram um aviso só', n2 = 1, n2 || ' aviso(s) na fila');
+
+    perform set_config('privado.site_avisado', '', true);
+    update public.cidades set nome = 'Cidade Teste Um Renomeada' where id = cidade_um;
+    select count(*) into n2 from net.http_request_queue where url = 'https://site-teste.invalid/api/revalidar';
+    r := r || pg_temp.resultado('Mudar uma lista (ex.: cidade) também avisa o site', n2 = 2, n2 || ' aviso(s) na fila');
+
+    -- Sem o endereço no Vault (renomeado só dentro do teste), nada é enviado
+    -- e a gravação continua funcionando.
+    perform vault.update_secret(s.id, new_name := 'aviso_site_endereco_teste_desligado')
+       from vault.secrets s where s.name = 'aviso_site_endereco';
+    perform set_config('privado.site_avisado', '', true);
+    n := pg_temp.linhas(format('update public.vagas set observacao = ''Sem aviso'' where id = %L', vaga_a2));
+    select count(*) into n2 from net.http_request_queue where url like 'https://site-teste.invalid/%';
+    r := r || pg_temp.resultado('Sem o endereço do site no Vault, a vaga é gravada e nenhum aviso sai',
+                                n = 1 and n2 = 2, n || ' vaga alterada, ' || n2 || ' aviso(s) na fila');
+
+    perform pg_temp.como_visitante();
+    msg := pg_temp.erro('select privado.avisar_site()');
+    perform pg_temp.como_usuario(usuario_a);
+    msg2 := pg_temp.erro('select privado.configurar_aviso_ao_site(''https://outro-site.invalid'')');
+    perform pg_temp.como_servidor();
+    txt := pg_temp.erro('select privado.avisar_site()');
+    r := r || pg_temp.resultado('Visitante, empresa e servidor não chamam as funções do aviso nem leem o segredo',
+                                msg is not null and msg2 is not null and txt is not null,
+                                coalesce(msg, '') || ' | ' || coalesce(msg2, '') || ' | ' || coalesce(txt, ''));
+
+    perform pg_temp.como_sistema();
+    select count(*) into n from cron.job
+     where jobname = 'avisar-site-meia-noite' and schedule = '0 3 * * *' and active
+       and command = 'select privado.avisar_site()';
+    r := r || pg_temp.resultado('Aviso diário agendado para a meia-noite de Brasília (03:00 UTC)', n = 1);
 
     -- =================================================================
     -- Tabelas criadas no futuro
