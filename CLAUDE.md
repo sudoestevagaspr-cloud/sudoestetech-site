@@ -15,8 +15,9 @@ qualquer coisa. Este arquivo é só um resumo; se os dois divergirem, vale `docs
 - **Resend** para os e-mails transacionais.
 - Tudo nos planos gratuitos por enquanto.
 
-Referência visual: o site antigo (repositório a ser informado pelo Luan). Usar só a identidade
-visual (cores, fontes, estilo dos cards). Não reaproveitar a lógica do Google Sheets.
+Referência visual: o site antigo, no repositório `sudoestevagaspr-cloud/sudoestevagaspr-cloud.github.io`
+(HTML estático no Cloudflare Pages). Usar só a identidade visual (cores, fontes, estilo dos cards).
+Não reaproveitar a lógica do Google Sheets.
 
 ## Regras de trabalho
 
@@ -112,6 +113,23 @@ Confirmadas no fim da Fase 1 (23/11/2026):
 13. Fonte e data de conferência são opcionais nas vagas curadas.
 14. O link de candidatura aceita `https://`, `http://` e `mailto:`.
 
+Respondidas no plano da Fase 2 (23/11/2026; plano em https://claude.ai/artifact/4MBLBAf3Hg59KFjJjG7BYZ):
+
+15. O sudoestetech.com.br passa para o site novo no fim da Fase 4. Até lá, o novo fica no endereço de
+    teste da Cloudflare (`*.workers.dev`).
+16. Links antigos (`vaga.html?id=...`) levam para a lista de vagas.
+17. Vaga fora do ar: aviso "Esta vaga não está mais no ar" e as vagas abertas logo abaixo, sem os
+    dados da vaga antiga.
+18. Até a Fase 3, a chamada "Tem vaga de TI na região?" continua como no site antigo (formulário do
+    Google, Direct e e-mail). Na Fase 3 ela vira o pré-cadastro.
+19. O contador GoatCounter (visitas do site todo, sem cookies) continua; as métricas por vaga ficam no banco.
+20. Selo "Nova" por 7 dias depois da publicação.
+21. Ordenações: mais recentes (padrão), prazo mais próximo, cargo de A a Z e de Z a A.
+22. Filtros só de cidade, modalidade, nível e área (sem filtro de contrato).
+23. As vagas são marcadas para o Google para Vagas (dados estruturados `JobPosting`).
+24. Termos de uso e política de privacidade: Claude escreve um rascunho na Fase 3 para o Luan revisar.
+25. Cache das páginas no R2 da Cloudflare (o checkout do R2 pode pedir cartão; o uso fica no grátis).
+
 ## Banco de dados (Supabase)
 
 Guia da Fase 1 para o Luan: `docs/fase-1-banco.md`.
@@ -143,6 +161,51 @@ Guia da Fase 1 para o Luan: `docs/fase-1-banco.md`.
   `encerra_em`.
 - **Nada é apagado**: sem DELETE em vagas; exclusão de conta é `rpc('excluir_conta_empresa')`, que
   apaga contato e login. Arquivos do Storage são apagados pela API do Storage, não por SQL.
+- **Aviso ao site** (migration `20261123050000`): gatilhos `t95_avisar_site` (um aviso por
+  transação) em `vagas`, `empresas`, `cidades`, `areas`, `niveis`, `modalidades` e `contratos`, e o
+  pg_cron `avisar-site-meia-noite` (03:00 UTC), chamam `privado.avisar_site()`, que faz o POST em
+  `/api/revalidar` pelo pg_net. Endereço e segredo ficam no Vault (`aviso_site_endereco`,
+  `aviso_site_segredo`), gravados por `privado.configurar_aviso_ao_site(endereco)`. Tabela nova cujo
+  dado aparece no site ganha o mesmo gatilho. O banco local fica sem o Vault configurado depois de
+  `npm run db:reset` (os testes do navegador contam com isso).
+
+## Site (Next.js na Cloudflare)
+
+Guia da Fase 2 para o Luan: `docs/fase-2-site.md` (Cloudflare, Vault e roteiro de teste).
+
+- **Next.js 16 (App Router) + OpenNext** (`@opennextjs/cloudflare`) num Worker chamado
+  `sudoestetech-site`. As APIs do Next 16 mudaram (ex.: `revalidateTag` pede 2º argumento,
+  `error.tsx` recebe `retry`): consulte a documentação que vem em `node_modules/next/dist/docs/`.
+  TypeScript, Tailwind v4 (cores em `app/globals.css`, `@theme`) e Montserrat guardada no site.
+- **Cache (ISR clássico, sem Cache Components)**: o OpenNext ainda não suporta Cache Components
+  por completo. Páginas com `revalidate = false`; `/vagas/[slug]` e a imagem de prévia são geradas
+  na primeira visita (`generateStaticParams` vazio) e guardadas no R2 (`sudoestetech-cache`); as
+  datas das invalidações ficam no D1 (`sudoestetech-cache-tags`); fila no Durable Object
+  `DOQueueHandler`. `/api/revalidar` (Bearer `REVALIDAR_SEGREDO`, comparação em tempo constante)
+  faz `revalidatePath("/", "layout")`, que descarta todas as páginas de uma vez. Sem consultas ao
+  banco entre uma mudança e outra (medido no teste da Fase 2).
+- **Leitura do banco** só no servidor, em `lib/dados.ts`: `fetch` na API REST com a chave
+  publicável (`cache: "force-cache"`, etiqueta `vagas`), lendo `vagas_publicas` e as listas. Sem
+  supabase-js por enquanto. **No navegador** (`lib/api-navegador.ts`): `rpc/registrar_metrica`
+  (uma vez por dia por vaga, marca no localStorage, sem cookie) e `insert` em `reports`.
+- **Busca, filtros e ordem** rodam no navegador sobre a lista inteira (`lib/vagas.ts`) e vão para o
+  endereço (`/?cidade=...&nivel=...&q=...&ordem=...`).
+- **Variáveis**: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` e
+  `NEXT_PUBLIC_SITE_URL` entram no código na hora do build (na Cloudflare: variáveis de build);
+  `REVALIDAR_SEGREDO` é segredo do Worker (variável de execução). Modelo em `.env.example`; no
+  computador, `.env.local`. `npm run build` apaga `.next/cache/fetch-cache` antes (script
+  `prebuild`) para nunca montar páginas com dados de um build anterior.
+- **Fora do domínio principal** (`*.workers.dev`, computador): `noindex` e o GoatCounter não conta.
+- **Logos** com `<img>` (o otimizador de imagens do Next pediria o Cloudflare Images). Na Fase 3, cada
+  logo novo deve ir com nome de arquivo novo e atualizar `empresas.logo_path` (o gatilho avisa o site).
+- **Plano gratuito da Cloudflare**: 10 ms de CPU por requisição, com alguma tolerância. Montar uma
+  página leva uns 30 ms (a imagem de prévia, uns 70 ms), mas isso só acontece depois de uma
+  mudança; as visitas comuns saem do cache (~3 ms). Se aparecer erro de CPU no painel do Worker, a
+  saída é o plano pago (US$ 5/mês; perguntar ao Luan antes) ou trocar a prévia gerada pelo logo.
+- **Testes**: `npm test` (regras, Vitest, `tests/unidade`), `npm run test:e2e` (Playwright, celular e
+  computador, `tests/navegador`; antes `npm run db:start` e `npm run db:reset`; para testar a prévia
+  da Cloudflare, `npm run cf:preview` e `ENDERECO_DO_SITE=http://localhost:8787 npm run test:e2e`),
+  `npm run lint` e `npm run typecheck`.
 
 ## Fases
 
@@ -150,7 +213,8 @@ Guia da Fase 1 para o Luan: `docs/fase-1-banco.md`.
   com limite personalizado por empresa) e políticas de Row Level Security.
   Concluída em 23/11/2026, depois do teste do Luan no projeto dele.
 - [ ] **Fase 2: site público** com listagem, busca, filtros e página de cada vaga com link próprio.
-  ← **fase atual: plano em preparação, aguardando a aprovação do Luan**
+  ← **fase atual: construída em 23/11/2026; aguardando o teste do Luan na Cloudflare
+  (roteiro em `docs/fase-2-site.md`)**
 - [ ] Fase 3: pré-cadastro e painel da empresa.
 - [ ] Fase 4: painel do admin.
 - [ ] Fase 5: e-mails automáticos e tarefas agendadas.
