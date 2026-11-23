@@ -121,21 +121,22 @@ insert into public.cidades (nome) values ('Pato Branco');
 -- Uma empresa sem login e uma vaga curada para ela
 insert into public.empresas (nome_fantasia) values ('Empresa Exemplo') returning id;
 
-insert into public.vagas (empresa_id, cargo, area_principal_id, nivel_id, contrato_id,
-                          modalidade_id, cidade_id, atividades, requisitos,
+-- (desde a migration 20261123060000, nível, contrato e modalidade são listas)
+insert into public.vagas (empresa_id, cargo, area_principal_id, niveis, contratos,
+                          modalidades, cidade_id, atividades, requisitos,
                           link_candidatura, encerra_em)
 select e.id, 'Analista de Suporte Júnior',
        (select id from public.areas where slug = 'suporte-tecnico-e-help-desk'),
-       (select id from public.niveis where slug = 'junior'),
-       (select id from public.contratos where slug = 'clt'),
-       (select id from public.modalidades where slug = 'presencial'),
+       array(select id from public.niveis where slug in ('junior')),
+       array(select id from public.contratos where slug in ('clt')),
+       array(select id from public.modalidades where slug in ('presencial')),
        (select id from public.cidades where slug = 'pato-branco'),
        'Atender chamados.', 'Windows e redes.', 'https://exemplo.com.br/vaga',
        current_date + 30
   from public.empresas e where e.nome_fantasia = 'Empresa Exemplo';
 
 -- A vitrine, como o site público vai ler
-select slug, cargo, empresa_nome, cidade_nome, modalidade_nome from public.vagas_publicas;
+select slug, cargo, empresa_nome, cidade_nome, modalidades_nomes from public.vagas_publicas;
 ```
 
 Para ver como um visitante, troque o papel no seletor do SQL Editor (onde aparece `postgres`) para `anon` e rode `select * from public.empresas;`. O resultado é um erro de permissão negada, enquanto `select * from public.vagas_publicas;` funciona. Volte o seletor para `postgres` depois.

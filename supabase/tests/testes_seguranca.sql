@@ -1,5 +1,5 @@
 -- =====================================================================
--- Testes de segurança e regras do banco (Fase 1)
+-- Testes de segurança e regras do banco (Fases 1 e 2)
 -- =====================================================================
 --
 -- Como rodar no Supabase: abra o SQL Editor, cole este arquivo inteiro e
@@ -114,6 +114,7 @@ declare
   empresa_a uuid := gen_random_uuid();
   empresa_b uuid := gen_random_uuid();
   empresa_curada uuid := gen_random_uuid();
+  empresa_com_cidade uuid := gen_random_uuid();
 
   cidade_um uuid;
   cidade_dois uuid;
@@ -122,7 +123,9 @@ declare
   area3 uuid;
   area4 uuid;
   nivel1 uuid;
+  nivel2 uuid;
   contrato1 uuid;
+  contrato2 uuid;
   presencial uuid;
   remoto uuid;
 
@@ -170,8 +173,10 @@ begin
     select id into area2 from public.areas where ativo order by ordem, nome offset 1 limit 1;
     select id into area3 from public.areas where ativo order by ordem, nome offset 2 limit 1;
     select id into area4 from public.areas where ativo order by ordem, nome offset 3 limit 1;
-    select id into nivel1 from public.niveis where ativo order by ordem, nome limit 1;
-    select id into contrato1 from public.contratos where ativo order by ordem, nome limit 1;
+    select id into nivel1 from public.niveis where ativo order by ordem, nome offset 0 limit 1;
+    select id into nivel2 from public.niveis where ativo order by ordem, nome offset 1 limit 1;
+    select id into contrato1 from public.contratos where ativo order by ordem, nome offset 0 limit 1;
+    select id into contrato2 from public.contratos where ativo order by ordem, nome offset 1 limit 1;
     select id into presencial from public.modalidades where ativo and not remota order by ordem, nome limit 1;
     select id into remoto from public.modalidades where ativo and remota order by ordem, nome limit 1;
 
@@ -197,9 +202,9 @@ begin
     base_vaga := jsonb_build_object(
       'cargo', 'Analista de TI Jr',
       'area_principal_id', area1,
-      'nivel_id', nivel1,
-      'contrato_id', contrato1,
-      'modalidade_id', presencial,
+      'niveis', jsonb_build_array(nivel1),
+      'contratos', jsonb_build_array(contrato1),
+      'modalidades', jsonb_build_array(presencial),
       'cidade_id', cidade_um,
       'atividades', 'Atender usuários e manter a rede.',
       'requisitos', 'Conhecimento em redes, SQL e Python.',
@@ -260,18 +265,19 @@ begin
 
     perform pg_temp.como_usuario(usuario_a);
     msg := pg_temp.erro(format(
-      'insert into public.vagas (cargo, area_principal_id, nivel_id, contrato_id, modalidade_id, cidade_id, '
+      'insert into public.vagas (cargo, area_principal_id, niveis, contratos, modalidades, cidade_id, '
       'atividades, requisitos, link_candidatura, encerra_em) values (%L, %L, %L, %L, %L, %L, %L, %L, %L, %L)',
-      'Vaga direta na tabela', area1, nivel1, contrato1, presencial, cidade_um, 'x', 'y', 'https://exemplo.com.br', hoje + 10));
+      'Vaga direta na tabela', area1, array[nivel1], array[contrato1], array[presencial], cidade_um, 'x', 'y',
+      'https://exemplo.com.br', hoje + 10));
     r := r || pg_temp.resultado('Inserir direto na tabela, sem a função, também respeita o limite',
                                 msg = mensagem_limite_2, msg);
 
     -- Uma vaga curada pelo admin para a empresa A (não conta no limite).
     perform pg_temp.como_sistema();
-    insert into public.vagas (empresa_id, origem, cargo, area_principal_id, nivel_id, contrato_id,
-                              modalidade_id, cidade_id, atividades, requisitos, link_candidatura, encerra_em, fonte)
-    values (empresa_a, 'curada', 'Vaga curada da A', area1, nivel1, contrato1, presencial, cidade_um,
-            'x', 'y', 'https://exemplo.com.br', hoje + 15, 'LinkedIn')
+    insert into public.vagas (empresa_id, origem, cargo, area_principal_id, niveis, contratos,
+                              modalidades, cidade_id, atividades, requisitos, link_candidatura, encerra_em, fonte)
+    values (empresa_a, 'curada', 'Vaga curada da A', area1, array[nivel1], array[contrato1], array[presencial],
+            cidade_um, 'x', 'y', 'https://exemplo.com.br', hoje + 15, 'LinkedIn')
     returning id into vaga_curada_a;
 
     -- =================================================================
@@ -431,7 +437,7 @@ begin
 
     perform pg_temp.como_usuario(usuario_b);
     resp := public.publicar_vaga(base_vaga || jsonb_build_object(
-      'cargo', 'Desenvolvedor Remoto', 'modalidade_id', remoto, 'cidade_id', cidade_dois,
+      'cargo', 'Desenvolvedor Remoto', 'modalidades', jsonb_build_array(remoto), 'cidade_id', cidade_dois,
       'areas_secundarias', jsonb_build_array(area2, area3), 'salario_min', 4000, 'salario_max', 6000));
     vaga_b1 := (resp ->> 'id')::uuid;
     r := r || pg_temp.resultado('Vaga com áreas secundárias e faixa salarial é aceita', (resp ->> 'ok')::boolean, resp::text);
@@ -453,7 +459,7 @@ begin
                                 'Colunas indevidas: ' || txt);
 
     select count(*) into n from public.vagas_publicas
-     where id = vaga_b1 and (cidade_id = cidade_um or modalidade_remota);
+     where id = vaga_b1 and (cidade_id = cidade_um or aceita_remoto);
     r := r || pg_temp.resultado('Vaga remota aparece no filtro de qualquer cidade', n = 1);
 
     select count(*) into n from public.vagas_publicas
@@ -470,6 +476,78 @@ begin
     perform pg_temp.como_visitante();
     select count(*) into n from public.vagas_publicas where id = vaga_a3;
     r := r || pg_temp.resultado('Vaga com prazo vencido some da vitrine na hora, antes de qualquer tarefa agendada', n = 0);
+
+    -- =================================================================
+    -- Mais de uma opção; nível e prazo nas curadas (decisões 26 a 28)
+    -- =================================================================
+    perform pg_temp.como_usuario(usuario_b);
+    msg := pg_temp.erro(format('select public.publicar_vaga(%L::jsonb)', base_vaga || '{"niveis": []}'));
+    r := r || pg_temp.resultado('Vaga da empresa precisa de pelo menos um nível',
+                                msg = 'Informe pelo menos um nível.', msg);
+
+    perform pg_temp.como_usuario(admin_id, 'aal2');
+    msg := pg_temp.erro(format('select public.publicar_vaga(%L::jsonb)',
+                               base_vaga || jsonb_build_object('empresa_id', empresa_curada, 'contratos', '[]'::jsonb)));
+    msg2 := pg_temp.erro(format('select public.publicar_vaga(%L::jsonb)',
+                                base_vaga || jsonb_build_object('empresa_id', empresa_curada, 'modalidades', '[]'::jsonb)));
+    r := r || pg_temp.resultado('Contrato e modalidade são obrigatórios em toda vaga, inclusive na curada',
+                                msg = 'Informe pelo menos um contrato.' and msg2 = 'Informe pelo menos uma modalidade.',
+                                coalesce(msg, '') || ' | ' || coalesce(msg2, ''));
+
+    resp := public.publicar_vaga(base_vaga || jsonb_build_object(
+      'empresa_id', empresa_curada, 'cargo', 'Vaga curada sem nível', 'niveis', '[]'::jsonb, 'prazo_informado', false));
+    perform pg_temp.como_visitante();
+    select count(*) into n from public.vagas_publicas
+     where id = (resp ->> 'id')::uuid and cardinality(niveis) = 0 and cardinality(niveis_nomes) = 0
+       and not prazo_informado;
+    r := r || pg_temp.resultado('Vaga curada pode ficar sem nível e sem prazo informado, e vai para a vitrine assim',
+                                (resp ->> 'ok')::boolean and n = 1, resp::text);
+
+    -- Mudança desfeita no fim do bloco: a vaga B1 continua como estava.
+    begin
+      perform pg_temp.como_usuario(usuario_b);
+      msg := pg_temp.erro(format(
+        'update public.vagas set niveis = %L, contratos = %L, modalidades = %L where id = %L',
+        array[nivel2, nivel1], array[contrato1, contrato2], array[presencial, remoto], vaga_b1));
+      perform pg_temp.como_visitante();
+      select count(*) into n from public.vagas_publicas
+       where id = vaga_b1 and cardinality(niveis_nomes) = 2 and cardinality(contratos_nomes) = 2
+         and cardinality(modalidades_nomes) = 2 and aceita_remoto and not somente_remoto;
+      raise exception using errcode = 'TT001';
+    exception
+      when sqlstate 'TT001' then
+        null;
+    end;
+    r := r || pg_temp.resultado('Empresa informa mais de um nível, contrato e modalidade; a vitrine mostra todos',
+                                msg is null and n = 1, coalesce(msg, n || ' vaga(s) com as listas completas'));
+
+    perform pg_temp.como_sistema();
+    select count(*) into n from public.vagas_publicas
+     where id = vaga_b1 and somente_remoto and aceita_remoto and cardinality(modalidades) = 1;
+    r := r || pg_temp.resultado('Vaga só remota fica marcada como só remota na vitrine', n = 1);
+
+    perform pg_temp.como_usuario(usuario_b);
+    msg := pg_temp.erro(format('update public.vagas set prazo_informado = false where id = %L', vaga_b1));
+    perform pg_temp.como_usuario(admin_id, 'aal2');
+    msg2 := pg_temp.erro(format('update public.vagas set prazo_informado = false where id = %L', vaga_b1));
+    r := r || pg_temp.resultado('Prazo não informado é só na vaga curada (nem o admin tira o prazo da vaga da empresa)',
+                                msg is not null and msg2 is not null, coalesce(msg, '') || ' | ' || coalesce(msg2, ''));
+
+    perform pg_temp.como_sistema();
+    update public.niveis set ativo = false where id = nivel2;
+    perform pg_temp.como_usuario(usuario_b);
+    msg := pg_temp.erro(format('update public.vagas set niveis = %L where id = %L', array[nivel1, nivel2], vaga_b1));
+    perform pg_temp.como_sistema();
+    update public.niveis set ativo = true where id = nivel2;
+    r := r || pg_temp.resultado('Nível desativado não entra na lista de níveis da vaga',
+                                msg = 'Nível inválido ou desativado.', msg);
+
+    insert into public.empresas (id, nome_fantasia) values (empresa_com_cidade, 'Cooperativa Cidade Teste Dois');
+    perform pg_temp.como_usuario(admin_id, 'aal2');
+    resp := public.publicar_vaga(base_vaga || jsonb_build_object(
+      'empresa_id', empresa_com_cidade, 'cidade_id', cidade_dois, 'cargo', 'Analista de TI Jr.'));
+    r := r || pg_temp.resultado('O link não repete a cidade quando ela já está no nome da empresa',
+                                resp ->> 'slug' = 'analista-de-ti-jr-cooperativa-cidade-teste-dois', resp::text);
 
     -- =================================================================
     -- Métricas
@@ -725,6 +803,66 @@ begin
     select count(*) into n from public.usuarios where id = usuario_b;
     select count(*) into n2 from auth.users where id = usuario_b;
     r := r || pg_temp.resultado('Excluir a conta remove o login', n = 0 and n2 = 0);
+
+    -- =================================================================
+    -- Aviso ao site (Fase 2)
+    -- =================================================================
+    -- Os pedidos ao site ficam na fila do pg_net (net.http_request_queue)
+    -- e só saem depois do commit. Como este script desfaz tudo no final,
+    -- nenhum pedido de teste chega a ser enviado. O endereço de teste
+    -- (.invalid) não existe na internet.
+    perform pg_temp.como_sistema();
+    perform privado.configurar_aviso_ao_site('https://site-teste.invalid/', repeat('s', 40));
+    -- Os comandos anteriores já avisaram nesta transação; zera a marca.
+    perform set_config('privado.site_avisado', '', true);
+
+    perform pg_temp.como_usuario(usuario_a);
+    n := pg_temp.linhas(format('update public.vagas set observacao = ''Aviso 1'' where id = %L', vaga_a2));
+
+    perform pg_temp.como_sistema();
+    select count(*) into n2 from net.http_request_queue
+     where url = 'https://site-teste.invalid/api/revalidar'
+       and method = 'POST'
+       and headers ->> 'Authorization' = 'Bearer ' || repeat('s', 40);
+    r := r || pg_temp.resultado('Empresa muda a vaga e o banco avisa o site, com o segredo no cabeçalho',
+                                n = 1 and n2 = 1, n || ' vaga alterada, ' || n2 || ' aviso(s) na fila');
+
+    perform pg_temp.como_usuario(usuario_a);
+    perform pg_temp.linhas(format('update public.vagas set observacao = ''Aviso 2'' where id = %L', vaga_a2));
+    perform pg_temp.como_sistema();
+    select count(*) into n2 from net.http_request_queue where url = 'https://site-teste.invalid/api/revalidar';
+    r := r || pg_temp.resultado('Vários comandos na mesma transação geram um aviso só', n2 = 1, n2 || ' aviso(s) na fila');
+
+    perform set_config('privado.site_avisado', '', true);
+    update public.cidades set nome = 'Cidade Teste Um Renomeada' where id = cidade_um;
+    select count(*) into n2 from net.http_request_queue where url = 'https://site-teste.invalid/api/revalidar';
+    r := r || pg_temp.resultado('Mudar uma lista (ex.: cidade) também avisa o site', n2 = 2, n2 || ' aviso(s) na fila');
+
+    -- Sem o endereço no Vault (renomeado só dentro do teste), nada é enviado
+    -- e a gravação continua funcionando.
+    perform vault.update_secret(s.id, new_name := 'aviso_site_endereco_teste_desligado')
+       from vault.secrets s where s.name = 'aviso_site_endereco';
+    perform set_config('privado.site_avisado', '', true);
+    n := pg_temp.linhas(format('update public.vagas set observacao = ''Sem aviso'' where id = %L', vaga_a2));
+    select count(*) into n2 from net.http_request_queue where url like 'https://site-teste.invalid/%';
+    r := r || pg_temp.resultado('Sem o endereço do site no Vault, a vaga é gravada e nenhum aviso sai',
+                                n = 1 and n2 = 2, n || ' vaga alterada, ' || n2 || ' aviso(s) na fila');
+
+    perform pg_temp.como_visitante();
+    msg := pg_temp.erro('select privado.avisar_site()');
+    perform pg_temp.como_usuario(usuario_a);
+    msg2 := pg_temp.erro('select privado.configurar_aviso_ao_site(''https://outro-site.invalid'')');
+    perform pg_temp.como_servidor();
+    txt := pg_temp.erro('select privado.avisar_site()');
+    r := r || pg_temp.resultado('Visitante, empresa e servidor não chamam as funções do aviso nem leem o segredo',
+                                msg is not null and msg2 is not null and txt is not null,
+                                coalesce(msg, '') || ' | ' || coalesce(msg2, '') || ' | ' || coalesce(txt, ''));
+
+    perform pg_temp.como_sistema();
+    select count(*) into n from cron.job
+     where jobname = 'avisar-site-meia-noite' and schedule = '0 3 * * *' and active
+       and command = 'select privado.avisar_site()';
+    r := r || pg_temp.resultado('Aviso diário agendado para a meia-noite de Brasília (03:00 UTC)', n = 1);
 
     -- =================================================================
     -- Tabelas criadas no futuro

@@ -1,0 +1,67 @@
+// Configuração do Worker da Cloudflare (o "servidor" do site).
+// O OpenNext transforma o build do Next.js em .open-next/worker.js, e o
+// Wrangler publica esse arquivo. O passo a passo está em docs/fase-2-site.md.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sudoestetech-site",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+
+  // Mantém as variáveis cadastradas no painel da Cloudflare a cada nova
+  // publicação, em vez de trocá-las pelas deste arquivo (que não tem nenhuma).
+  "keep_vars": true,
+
+  // Arquivos estáticos (CSS, JS, fontes, imagens): servidos direto pela
+  // Cloudflare, sem passar pelo Worker e sem contar no limite de requisições.
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+
+  // O Worker chama a si mesmo para remontar uma página em segundo plano.
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "sudoestetech-site"
+    }
+  ],
+
+  // Cópias das páginas prontas (cache). O bucket é criado no painel do R2.
+  "r2_buckets": [
+    {
+      "binding": "NEXT_INC_CACHE_R2_BUCKET",
+      "bucket_name": "sudoestetech-cache"
+    }
+  ],
+
+  // Quando cada página foi descartada (o "aviso" do banco grava aqui).
+  // O banco D1 é criado no painel; o Wrangler encontra o id pelo nome.
+  "d1_databases": [
+    {
+      "binding": "NEXT_TAG_CACHE_D1",
+      "database_name": "sudoestetech-cache-tags"
+    }
+  ],
+
+  // Fila que remonta páginas em segundo plano. É criada sozinha na publicação.
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "NEXT_CACHE_DO_QUEUE",
+        "class_name": "DOQueueHandler"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["DOQueueHandler"]
+    }
+  ],
+
+  // Logs do Worker no painel da Cloudflare (Workers > sudoestetech-site > Logs).
+  "observability": {
+    "enabled": true
+  }
+}

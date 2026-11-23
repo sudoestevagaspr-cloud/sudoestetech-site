@@ -35,6 +35,12 @@ Dados da empresa:
 
 Obrigatórios: cargo, área principal, nível, contrato, modalidade, cidade, atividades, requisitos, link de candidatura, data de encerramento.
 
+Ajustes de 23/11/2026, no cadastro das primeiras vagas reais:
+
+- Nível, contrato e modalidade aceitam mais de uma opção (ex.: "Júnior ou Pleno", "CLT ou PJ", "Presencial ou Híbrido"). Contrato e modalidade continuam obrigatórios em toda vaga.
+- Na vaga curada, o nível pode ficar em branco (a fonte nem sempre informa). Na vaga da empresa, continua obrigatório.
+- Na vaga curada, o prazo pode ser "não informado": a vaga continua com uma data de encerramento, escolhida pelo admin, e sai do ar nela, mas o site mostra "Prazo não informado, candidate-se logo" no lugar da data.
+
 Opcionais: áreas secundárias, salário (faixa mínimo/máximo ou "a combinar"), benefícios, PcD (sim/não), como se candidatar (texto de apoio), observação.
 
 Só para vagas curadas: fonte e data de conferência.
@@ -82,6 +88,7 @@ O site apenas anuncia e direciona. O botão "Candidatar-se" leva ao link externo
 - Busca por texto: cargo, empresa ou tecnologia.
 - Filtros: cidade (com opção "todas"), modalidade, nível, área.
 - Regra de cidade: cidade e modalidade são guardadas separadas. "Remoto" existe só no filtro de modalidade. O filtro de cidade vale para vagas presenciais e híbridas; vagas remotas aparecem em qualquer cidade filtrada. Na listagem, a remota aparece como "Remoto — empresa de [cidade]".
+- Vaga com mais de uma modalidade (23/11/2026): se uma delas for remota, a vaga aparece em qualquer cidade filtrada. "Remoto — empresa de [cidade]" fica para a vaga só remota; a "Híbrido ou Remoto" mostra a cidade.
 
 ## 5. Card e página da vaga
 
