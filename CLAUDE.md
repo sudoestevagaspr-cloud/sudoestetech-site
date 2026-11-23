@@ -230,6 +230,9 @@ Guia da Fase 2 para o Luan: `docs/fase-2-site.md` (Cloudflare, Vault e roteiro d
   página leva uns 30 ms (a imagem de prévia, uns 70 ms), mas isso só acontece depois de uma
   mudança; as visitas comuns saem do cache (~3 ms). Se aparecer erro de CPU no painel do Worker, a
   saída é o plano pago (US$ 5/mês; perguntar ao Luan antes) ou trocar a prévia gerada pelo logo.
+  Medido no teste de 23/11/2026 (dia atípico: 3 deploys e várias mudanças, cada uma refazendo as
+  páginas): 0 erros "Exceeded CPU Time Limits"; CPU P50 26 ms, P90 86 ms, P99 229 ms; 22 consultas
+  ao Supabase em 82 requisições. Reconferir a aba Metrics depois de uns dias de uso normal.
 - **Testes**: `npm test` (regras, Vitest, `tests/unidade`), `npm run test:e2e` (Playwright, celular e
   computador, `tests/navegador`; antes `npm run db:start` e `npm run db:reset`; para testar a prévia
   da Cloudflare, `npm run cf:preview` e `ENDERECO_DO_SITE=http://localhost:8787 npm run test:e2e`),
@@ -240,9 +243,9 @@ Guia da Fase 2 para o Luan: `docs/fase-2-site.md` (Cloudflare, Vault e roteiro d
 - [x] Fase 1: modelagem do banco no Supabase (tabelas, relacionamentos, listas fixas, planos
   com limite personalizado por empresa) e políticas de Row Level Security.
   Concluída em 23/11/2026, depois do teste do Luan no projeto dele.
-- [ ] **Fase 2: site público** com listagem, busca, filtros e página de cada vaga com link próprio.
-  ← **fase atual: construída em 23/11/2026; aguardando o teste do Luan na Cloudflare
-  (roteiro em `docs/fase-2-site.md`)**
-- [ ] Fase 3: pré-cadastro e painel da empresa.
+- [x] Fase 2: site público com listagem, busca, filtros e página de cada vaga com link próprio.
+  Concluída em 23/11/2026, depois do teste do Luan na Cloudflare (roteiro em `docs/fase-2-site.md`),
+  com as 2 primeiras vagas reais (Cresol e Unimed) cadastradas como curadas.
+- [ ] **Fase 3: pré-cadastro e painel da empresa.** ← **próxima: apresentar o plano e esperar a aprovação**
 - [ ] Fase 4: painel do admin.
 - [ ] Fase 5: e-mails automáticos e tarefas agendadas.
