@@ -1,10 +1,27 @@
 # Dependências
 node_modules/
 
-# Variáveis de ambiente: nunca vão para o repositório
+# Variáveis de ambiente e segredos locais: nunca vão para o repositório
 .env
 .env.*
 !.env.example
+.dev.vars
+.dev.vars.*
+
+# Next.js, OpenNext e Cloudflare (gerados no build)
+/.next/
+/out/
+/.open-next/
+/.wrangler/
+*.tsbuildinfo
+next-env.d.ts
+cloudflare-env.d.ts
+
+# Testes
+/test-results/
+/playwright-report/
+/blob-report/
+/coverage/
 
 # Sistema
 .DS_Store

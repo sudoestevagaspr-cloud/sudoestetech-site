@@ -1,0 +1,16 @@
+# Cabeçalhos dos arquivos estáticos (JS, CSS, fontes e imagens).
+#
+# Na Cloudflare, esses arquivos são entregues direto, sem passar pelo
+# Next.js, então os cabeçalhos do next.config.ts não valem para eles.
+# Este arquivo é lido pela Cloudflare e não fica visível no site.
+
+# Arquivos do Next.js: o nome muda a cada versão do site (tem um código no
+# nome), então o navegador pode guardar por 1 ano sem medo de ficar velho.
+/_next/static/*
+  Cache-Control: public, max-age=31536000, immutable
+  X-Content-Type-Options: nosniff
+
+# Logo, ícones e imagem de prévia: guardados por 1 dia.
+/img/*
+  Cache-Control: public, max-age=86400
+  X-Content-Type-Options: nosniff
