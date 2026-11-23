@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { jsonParaScript, vagaParaGoogle } from "@/lib/google";
 import { paraVagaCompleta } from "@/lib/vagas";
-import { MAPA_AREAS, linha } from "./exemplos";
+import { HIBRIDO_OU_REMOTO, MAPA_AREAS, SO_REMOTO, linha } from "./exemplos";
 
 const URL_VAGA = "https://site-teste.workers.dev/vagas/desenvolvedor-pleno-empresa-exemplo-pato-branco";
 const google = (...args: Parameters<typeof linha>) =>
@@ -24,18 +24,31 @@ describe("dados para o Google para Vagas (decisão 23)", () => {
     });
   });
 
-  it("vaga presencial ou híbrida tem endereço", () => {
-    expect(google().jobLocation).toEqual({
-      "@type": "Place",
-      address: { "@type": "PostalAddress", addressLocality: "Pato Branco", addressRegion: "PR", addressCountry: "BR" },
-    });
+  const ENDERECO = {
+    "@type": "Place",
+    address: { "@type": "PostalAddress", addressLocality: "Pato Branco", addressRegion: "PR", addressCountry: "BR" },
+  };
+
+  it("vaga presencial ou híbrida tem endereço e não é teletrabalho", () => {
+    expect(google().jobLocation).toEqual(ENDERECO);
+    expect(google().jobLocationType).toBeUndefined();
   });
 
   it("vaga remota é marcada como teletrabalho no Brasil", () => {
-    const dados = google({ modalidade_remota: true });
+    const dados = google(SO_REMOTO);
     expect(dados.jobLocationType).toBe("TELECOMMUTE");
     expect(dados.applicantLocationRequirements).toEqual({ "@type": "Country", name: "Brasil" });
     expect(dados.jobLocation).toBeUndefined();
+  });
+
+  it("vaga híbrida ou remota leva o endereço e o teletrabalho", () => {
+    const dados = google(HIBRIDO_OU_REMOTO);
+    expect(dados.jobLocation).toEqual(ENDERECO);
+    expect(dados.jobLocationType).toBe("TELECOMMUTE");
+  });
+
+  it("sem prazo informado, o Google não recebe data de validade", () => {
+    expect(google({ prazo_informado: false }).validThrough).toBeUndefined();
   });
 
   it("salário mensal em reais só quando informado", () => {
@@ -49,8 +62,16 @@ describe("dados para o Google para Vagas (decisão 23)", () => {
   });
 
   it("estágio e PJ", () => {
-    expect(google({ contrato_slug: "estagio-nao-obrigatorio" }).employmentType).toBe("INTERN");
-    expect(google({ contrato_slug: "pj" }).employmentType).toBe("CONTRACTOR");
+    expect(google({ contratos_slugs: ["estagio-nao-obrigatorio"] }).employmentType).toBe("INTERN");
+    expect(google({ contratos_slugs: ["pj"] }).employmentType).toBe("CONTRACTOR");
+  });
+
+  it("mais de um contrato vira lista, sem repetir", () => {
+    expect(google({ contratos_slugs: ["clt", "pj"] }).employmentType).toEqual(["FULL_TIME", "CONTRACTOR"]);
+    expect(google({ contratos_slugs: ["estagio-obrigatorio", "estagio-nao-obrigatorio"] }).employmentType).toBe(
+      "INTERN",
+    );
+    expect(google({ contratos_slugs: ["contrato-novo"] }).employmentType).toBe("OTHER");
   });
 
   it("descrição em HTML com o texto escapado", () => {

@@ -20,6 +20,22 @@ export const MODALIDADES: ItemLista[] = [
   { id: "m-remoto", nome: "Remoto", slug: "remoto", ordem: 3 },
 ];
 
+/** Vaga só remota. */
+export const SO_REMOTO: Partial<VagaPublicaLinha> = {
+  modalidades_nomes: ["Remoto"],
+  modalidades_slugs: ["remoto"],
+  aceita_remoto: true,
+  somente_remoto: true,
+};
+
+/** Vaga que pode ser híbrida ou remota. */
+export const HIBRIDO_OU_REMOTO: Partial<VagaPublicaLinha> = {
+  modalidades_nomes: ["Híbrido", "Remoto"],
+  modalidades_slugs: ["hibrido", "remoto"],
+  aceita_remoto: true,
+  somente_remoto: false,
+};
+
 export function linha(mudancas: Partial<VagaPublicaLinha> = {}): VagaPublicaLinha {
   return {
     id: "vaga-1",
@@ -34,13 +50,14 @@ export function linha(mudancas: Partial<VagaPublicaLinha> = {}): VagaPublicaLinh
     cidade_nome: "Pato Branco",
     cidade_uf: "PR",
     cidade_slug: "pato-branco",
-    modalidade_nome: "Híbrido",
-    modalidade_slug: "hibrido",
-    modalidade_remota: false,
-    nivel_nome: "Pleno",
-    nivel_slug: "pleno",
-    contrato_nome: "CLT",
-    contrato_slug: "clt",
+    modalidades_nomes: ["Híbrido"],
+    modalidades_slugs: ["hibrido"],
+    aceita_remoto: false,
+    somente_remoto: false,
+    niveis_nomes: ["Pleno"],
+    niveis_slugs: ["pleno"],
+    contratos_nomes: ["CLT"],
+    contratos_slugs: ["clt"],
     area_principal_nome: "Desenvolvimento",
     area_principal_slug: "desenvolvimento",
     todas_areas: ["a-dev"],
@@ -56,6 +73,7 @@ export function linha(mudancas: Partial<VagaPublicaLinha> = {}): VagaPublicaLinh
     pcd: false,
     observacao: null,
     publicada_em: "2026-11-20T13:00:00Z",
+    prazo_informado: true,
     ...mudancas,
   };
 }

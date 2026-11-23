@@ -5,6 +5,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 const cards = (page: Page) => page.locator("article[data-vaga]");
 const titulos = (page: Page) => cards(page).locator("h2");
+const chips = (card: ReturnType<Page["locator"]>) => card.getByRole("list", { name: "Detalhes da vaga" }).locator("li");
 
 async function abrirFiltros(page: Page) {
   // No celular os filtros ficam recolhidos atrás do botão "Filtros".
@@ -33,11 +34,23 @@ test("card mostra local, salário, prazo e selos", async ({ page }) => {
   await expect(remota.getByText("Salário a combinar")).toBeVisible();
   await expect(remota.getByText("Nova", { exact: true })).toBeVisible();
 
+  // Vaga curada sem nível e sem prazo informado, presencial ou híbrida:
+  // sem chip de nível e com o aviso no lugar da data.
   const estagio = page.locator('article[data-vaga="estagio-em-infraestrutura-e-redes-cooperativa-exemplo-francisco-beltrao"]');
-  await expect(estagio.getByText("Também para PcD")).toBeVisible();
+  await expect(chips(estagio)).toHaveText([
+    "Francisco Beltrão",
+    "Presencial ou Híbrido",
+    "Estágio não obrigatório",
+    "Também para PcD",
+  ]);
   await expect(estagio.getByText(/A partir de R\$\s1\.200 por mês/)).toBeVisible();
+  await expect(estagio.getByText("Prazo não informado, candidate-se logo")).toBeVisible();
   // Publicada há 10 dias: sem o selo "Nova".
   await expect(estagio.getByText("Nova", { exact: true })).toHaveCount(0);
+
+  // Mais de um nível e mais de um contrato.
+  const cientista = page.locator('article[data-vaga="cientista-de-dados-senior-agro-dados-dois-vizinhos"]');
+  await expect(chips(cientista)).toHaveText(["Dois Vizinhos", "Presencial", "Pleno ou Sênior", "CLT ou PJ"]);
 
   const semSalario = page.locator('article[data-vaga="analista-de-seguranca-da-informacao-pleno-software-sudoeste-pato-branco"]');
   await expect(semSalario.getByText(/^Inscrições até \d{2}\/\d{2}\/\d{4}$/)).toBeVisible();
@@ -85,10 +98,33 @@ test("filtros de modalidade, nível e área (com áreas secundárias)", async ({
   await abrirFiltros(page);
   await page.getByLabel("Modalidade").selectOption({ label: "Remoto" });
   await expect(cards(page)).toHaveCount(2);
+  // A vaga "Presencial ou Híbrido" aparece nos dois filtros.
+  await page.getByLabel("Modalidade").selectOption({ label: "Presencial" });
+  await expect(titulos(page)).toHaveText(["Cientista de Dados Sênior", "Estágio em Infraestrutura e Redes"]);
+  await page.getByLabel("Modalidade").selectOption({ label: "Híbrido" });
+  await expect(titulos(page)).toHaveText([
+    "Desenvolvedor Full Stack Pleno",
+    "Analista de Testes (QA) Júnior",
+    "Estágio em Infraestrutura e Redes",
+  ]);
   await page.getByLabel("Modalidade").selectOption({ label: "Todas as modalidades" });
 
   await page.getByLabel("Nível").selectOption({ label: "Júnior" });
   await expect(titulos(page)).toHaveText(["Analista de Suporte Júnior", "Analista de Testes (QA) Júnior"]);
+  // A vaga "Pleno ou Sênior" aparece no filtro de Pleno.
+  await page.getByLabel("Nível").selectOption({ label: "Pleno" });
+  await expect(titulos(page)).toHaveText([
+    "Desenvolvedor Full Stack Pleno",
+    "Cientista de Dados Sênior",
+    "Analista de Segurança da Informação Pleno",
+  ]);
+  // Nenhuma vaga no ar tem o nível Estágio (a de estágio não informa o nível).
+  await expect(page.getByLabel("Nível").locator("option")).toHaveText([
+    "Todos os níveis",
+    "Júnior",
+    "Pleno",
+    "Sênior",
+  ]);
   await page.getByLabel("Nível").selectOption({ label: "Todos os níveis" });
 
   // "Inteligência artificial" é área secundária da vaga de Cientista de Dados.
@@ -111,6 +147,8 @@ test("ordenações", async ({ page }) => {
 
   await ordem.selectOption({ label: "Prazo mais próximo" });
   await expect(titulos(page).first()).toHaveText("Analista de Testes (QA) Júnior");
+  // Sem prazo informado vai para o fim.
+  await expect(titulos(page).last()).toHaveText("Estágio em Infraestrutura e Redes");
 });
 
 test("busca pronta no endereço (para mandar no WhatsApp)", async ({ page }) => {

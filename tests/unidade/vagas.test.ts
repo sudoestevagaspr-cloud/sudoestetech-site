@@ -3,6 +3,7 @@ import {
   FILTROS_VAZIOS,
   filtrar,
   formatarSalario,
+  juntarComOu,
   lerDoEndereco,
   opcoesDeFiltro,
   ordenar,
@@ -10,7 +11,7 @@ import {
   paraEndereco,
   type VagaCard,
 } from "@/lib/vagas";
-import { AREAS, MAPA_AREAS, MODALIDADES, NIVEIS, linha } from "./exemplos";
+import { AREAS, HIBRIDO_OU_REMOTO, MAPA_AREAS, MODALIDADES, NIVEIS, SO_REMOTO, linha } from "./exemplos";
 
 const HOJE = "2026-11-23";
 const card = (...args: Parameters<typeof linha>) => paraCard(linha(...args), MAPA_AREAS, HOJE);
@@ -40,9 +41,47 @@ describe("salário (decisão 8)", () => {
 
 describe("card da vaga", () => {
   it("vaga remota aparece como 'Remoto — empresa de [cidade]'", () => {
-    const v = card({ modalidade_nome: "Remoto", modalidade_slug: "remoto", modalidade_remota: true });
+    const v = card(SO_REMOTO);
     expect(v.local).toBe("Remoto — empresa de Pato Branco");
-    expect(v.remota).toBe(true);
+    expect(v.somenteRemoto).toBe(true);
+    expect(v.aceitaRemoto).toBe(true);
+  });
+
+  it("vaga híbrida ou remota mostra a cidade e as duas modalidades", () => {
+    const v = card(HIBRIDO_OU_REMOTO);
+    expect(v.local).toBe("Pato Branco");
+    expect(v.modalidadeTexto).toBe("Híbrido ou Remoto");
+    expect(v.somenteRemoto).toBe(false);
+    expect(v.aceitaRemoto).toBe(true);
+  });
+
+  it("mais de um nível, contrato ou modalidade vira 'ou'", () => {
+    const v = card({
+      niveis_nomes: ["Júnior", "Pleno"],
+      niveis_slugs: ["junior", "pleno"],
+      contratos_nomes: ["CLT", "PJ"],
+      contratos_slugs: ["clt", "pj"],
+      modalidades_nomes: ["Presencial", "Híbrido"],
+      modalidades_slugs: ["presencial", "hibrido"],
+    });
+    expect(v.nivelTexto).toBe("Júnior ou Pleno");
+    expect(v.contratoTexto).toBe("CLT ou PJ");
+    expect(v.modalidadeTexto).toBe("Presencial ou Híbrido");
+    expect(juntarComOu(["Estágio", "Júnior", "Pleno"])).toBe("Estágio, Júnior ou Pleno");
+  });
+
+  it("vaga curada sem nível não mostra nível", () => {
+    expect(card({ niveis_nomes: [], niveis_slugs: [] }).nivelTexto).toBeNull();
+    expect(card({ niveis_nomes: null, niveis_slugs: null }).nivelTexto).toBeNull();
+  });
+
+  it("prazo não informado no lugar da data", () => {
+    const semSalario = card({ prazo_informado: false });
+    expect(semSalario.destaque).toBe("Prazo não informado, candidate-se logo");
+    expect(semSalario.prazoInformado).toBe(false);
+    const comSalario = card({ prazo_informado: false, salario_a_combinar: true });
+    expect(comSalario.destaque).toBe("Salário a combinar");
+    expect(comSalario.prazo).toBe("Prazo não informado, candidate-se logo");
   });
 
   it("cidade de fora do Paraná mostra o estado", () => {
@@ -77,14 +116,21 @@ describe("card da vaga", () => {
 
 describe("busca e filtros", () => {
   const vagas: VagaCard[] = [
-    card({ id: "1", cargo: "Desenvolvedor Júnior", nivel_slug: "junior", requisitos: "Java e Spring" }),
+    card({
+      id: "1",
+      cargo: "Desenvolvedor Júnior",
+      niveis_nomes: ["Júnior"],
+      niveis_slugs: ["junior"],
+      requisitos: "Java e Spring",
+    }),
     card({
       id: "2",
       cargo: "Analista de Suporte",
       empresa_nome: "Cooperativa Exemplo",
       cidade_nome: "Francisco Beltrão",
       cidade_slug: "francisco-beltrao",
-      modalidade_slug: "presencial",
+      modalidades_nomes: ["Presencial"],
+      modalidades_slugs: ["presencial"],
       area_principal_slug: "suporte-tecnico-e-help-desk",
       todas_areas: ["a-suporte"],
       requisitos: "Windows e redes",
@@ -94,9 +140,7 @@ describe("busca e filtros", () => {
       cargo: "Cientista de Dados",
       cidade_nome: "Dois Vizinhos",
       cidade_slug: "dois-vizinhos",
-      modalidade_nome: "Remoto",
-      modalidade_slug: "remoto",
-      modalidade_remota: true,
+      ...SO_REMOTO,
       todas_areas: ["a-dados", "a-dev"],
       requisitos: "Python",
     }),
@@ -143,6 +187,48 @@ describe("busca e filtros", () => {
   });
 });
 
+describe("vagas com mais de uma opção", () => {
+  const vagas: VagaCard[] = [
+    card({
+      id: "1",
+      niveis_nomes: ["Júnior", "Pleno"],
+      niveis_slugs: ["junior", "pleno"],
+      modalidades_nomes: ["Presencial", "Híbrido"],
+      modalidades_slugs: ["presencial", "hibrido"],
+    }),
+    card({ id: "2", cidade_nome: "Dois Vizinhos", cidade_slug: "dois-vizinhos", ...HIBRIDO_OU_REMOTO }),
+    card({ id: "3", niveis_nomes: [], niveis_slugs: [] }),
+  ];
+  const ids = (lista: VagaCard[]) => lista.map((v) => v.id);
+
+  it("filtros de nível e modalidade valem para qualquer opção da vaga", () => {
+    expect(ids(filtrar(vagas, { ...FILTROS_VAZIOS, nivel: "junior" }))).toEqual(["1"]);
+    expect(ids(filtrar(vagas, { ...FILTROS_VAZIOS, nivel: "pleno" }))).toEqual(["1", "2"]);
+    expect(ids(filtrar(vagas, { ...FILTROS_VAZIOS, modalidade: "presencial" }))).toEqual(["1"]);
+    expect(ids(filtrar(vagas, { ...FILTROS_VAZIOS, modalidade: "hibrido" }))).toEqual(["1", "2", "3"]);
+    expect(ids(filtrar(vagas, { ...FILTROS_VAZIOS, modalidade: "remoto" }))).toEqual(["2"]);
+  });
+
+  it("vaga sem nível aparece só sem filtro de nível", () => {
+    expect(ids(filtrar(vagas, FILTROS_VAZIOS))).toContain("3");
+    expect(ids(filtrar(vagas, { ...FILTROS_VAZIOS, nivel: "estagio" }))).toEqual([]);
+  });
+
+  it("vaga que também aceita remoto aparece em qualquer cidade e põe a cidade dela no filtro", () => {
+    expect(ids(filtrar(vagas, { ...FILTROS_VAZIOS, cidade: "pato-branco" }))).toEqual(["1", "2", "3"]);
+    expect(ids(filtrar(vagas, { ...FILTROS_VAZIOS, cidade: "dois-vizinhos" }))).toEqual(["2"]);
+    const opcoes = opcoesDeFiltro(vagas, { areas: AREAS, niveis: NIVEIS, modalidades: MODALIDADES });
+    expect(opcoes.cidades.map((c) => c.slug)).toEqual(["dois-vizinhos", "pato-branco"]);
+    expect(opcoes.niveis.map((n) => n.slug)).toEqual(["junior", "pleno"]);
+    expect(opcoes.modalidades.map((m) => m.slug)).toEqual(["presencial", "hibrido", "remoto"]);
+  });
+
+  it("busca encontra qualquer uma das opções", () => {
+    expect(ids(filtrar(vagas, { ...FILTROS_VAZIOS, q: "junior" }))).toEqual(["1"]);
+    expect(ids(filtrar(vagas, { ...FILTROS_VAZIOS, q: "remoto" }))).toEqual(["2"]);
+  });
+});
+
 describe("ordenação (decisão 21)", () => {
   const vagas: VagaCard[] = [
     card({ id: "b", cargo: "Banco de Dados", publicada_em: "2026-11-20T10:00:00Z", encerra_em: "2026-12-10" }),
@@ -156,6 +242,10 @@ describe("ordenação (decisão 21)", () => {
   });
   it("prazo mais próximo; empate vai para a mais recente", () => {
     expect(ids(ordenar(vagas, "prazo"))).toEqual(["c", "b", "a"]);
+  });
+  it("prazo mais próximo: vaga sem prazo informado vai para o fim", () => {
+    const comSemPrazo = [...vagas, card({ id: "d", cargo: "Dados", encerra_em: "2026-11-25", prazo_informado: false })];
+    expect(ids(ordenar(comSemPrazo, "prazo"))).toEqual(["c", "b", "a", "d"]);
   });
   it("cargo de A a Z e de Z a A", () => {
     expect(ids(ordenar(vagas, "az"))).toEqual(["a", "b", "c"]);

@@ -7,6 +7,7 @@ import { api, metricasDeHoje, vagaPorSlug } from "./banco";
 const CIENTISTA = "/vagas/cientista-de-dados-senior-agro-dados-dois-vizinhos";
 const QA = "/vagas/analista-de-testes-qa-junior-software-sudoeste-pato-branco";
 const ENCERRADA = "/vagas/desenvolvedor-mobile-empresa-exemplo-pato-branco";
+const ESTAGIO = "/vagas/estagio-em-infraestrutura-e-redes-cooperativa-exemplo-francisco-beltrao";
 
 test("mostra a vaga inteira e os dados da empresa", async ({ page }) => {
   await page.goto(CIENTISTA);
@@ -63,7 +64,7 @@ test("prévia para WhatsApp e Instagram e dados para o Google", async ({ page, r
   await page.goto(CIENTISTA);
   const meta = (propriedade: string) => page.locator(`meta[property="${propriedade}"]`).getAttribute("content");
   expect(await meta("og:title")).toBe("Cientista de Dados Sênior · Agro Dados");
-  expect(await meta("og:description")).toContain("Dois Vizinhos · Sênior · PJ");
+  expect(await meta("og:description")).toContain("Dois Vizinhos · Pleno ou Sênior · CLT ou PJ · Presencial.");
   const imagem = (await meta("og:image")) ?? "";
   expect(imagem).toMatch(/\/vagas\/cientista-de-dados-senior-agro-dados-dois-vizinhos\/opengraph-image/);
   expect(await meta("og:image:width")).toBe("1200");
@@ -75,11 +76,31 @@ test("prévia para WhatsApp e Instagram e dados para o Google", async ({ page, r
   const google = JSON.parse((await page.locator('script[type="application/ld+json"]').textContent()) ?? "{}");
   expect(google["@type"]).toBe("JobPosting");
   expect(google.title).toBe("Cientista de Dados Sênior");
-  expect(google.employmentType).toBe("CONTRACTOR");
+  expect(google.employmentType).toEqual(["FULL_TIME", "CONTRACTOR"]);
   expect(google.validThrough).toMatch(/T23:59:59-03:00$/);
 
   // Fora do domínio principal, o Google não indexa a versão de teste.
   await expect(page.locator('meta[name="robots"][content*="noindex"]')).not.toHaveCount(0);
+});
+
+test("vaga curada sem nível e sem prazo informado", async ({ page }) => {
+  await page.goto(ESTAGIO);
+  await expect(page.getByRole("list", { name: "Detalhes da vaga" }).locator("li")).toHaveText([
+    "Francisco Beltrão",
+    "Presencial ou Híbrido",
+    "Estágio não obrigatório",
+    "Também para PcD",
+  ]);
+  await expect(page.getByText(/^Publicada em \d{2}\/\d{2}\/\d{4} · Prazo não informado, candidate-se logo$/)).toBeVisible();
+  await expect(page.getByText(/Inscrições até/)).toHaveCount(0);
+
+  const descricao = await page.locator('meta[property="og:description"]').getAttribute("content");
+  expect(descricao).toContain("Prazo não informado, candidate-se logo.");
+  const google = JSON.parse((await page.locator('script[type="application/ld+json"]').textContent()) ?? "{}");
+  // Sem prazo da empresa, o Google não recebe data de validade.
+  expect(google.validThrough).toBeUndefined();
+  expect(google.employmentType).toBe("INTERN");
+  expect(google.jobLocation.address.addressLocality).toBe("Francisco Beltrão");
 });
 
 test("vaga fora do ar: aviso e vagas abertas, sem os dados antigos", async ({ page }) => {

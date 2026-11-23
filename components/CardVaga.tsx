@@ -33,9 +33,9 @@ export function CardVaga({ vaga, titulo = "h2" }: { vaga: VagaCard; titulo?: "h2
           <Icone nome="local" className="size-3.5 text-ciano" />
           {vaga.local}
         </li>
-        {!vaga.remota && <li className="chip">{vaga.modalidadeNome}</li>}
-        <li className="chip">{vaga.nivelNome}</li>
-        <li className="chip">{vaga.contratoNome}</li>
+        {!vaga.somenteRemoto && <li className="chip">{vaga.modalidadeTexto}</li>}
+        {vaga.nivelTexto && <li className="chip">{vaga.nivelTexto}</li>}
+        <li className="chip">{vaga.contratoTexto}</li>
         {vaga.pcd && <li className="chip">Também para PcD</li>}
       </ul>
 

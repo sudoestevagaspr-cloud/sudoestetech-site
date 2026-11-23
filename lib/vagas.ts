@@ -21,13 +21,19 @@ export type VagaPublicaLinha = {
   cidade_nome: string;
   cidade_uf: string;
   cidade_slug: string;
-  modalidade_nome: string;
-  modalidade_slug: string;
-  modalidade_remota: boolean;
-  nivel_nome: string;
-  nivel_slug: string;
-  contrato_nome: string;
-  contrato_slug: string;
+  /** Nomes e slugs das modalidades, na ordem da lista fixa (pelo menos uma). */
+  modalidades_nomes: string[] | null;
+  modalidades_slugs: string[] | null;
+  /** Alguma modalidade é remota: a vaga aparece no filtro de qualquer cidade. */
+  aceita_remoto: boolean;
+  /** Todas as modalidades são remotas: o local vira "Remoto — empresa de [cidade]". */
+  somente_remoto: boolean;
+  /** Nomes e slugs dos níveis, na ordem da lista fixa. Vaga curada pode não ter nenhum. */
+  niveis_nomes: string[] | null;
+  niveis_slugs: string[] | null;
+  /** Nomes e slugs dos contratos, na ordem da lista fixa (pelo menos um). */
+  contratos_nomes: string[] | null;
+  contratos_slugs: string[] | null;
   area_principal_nome: string;
   area_principal_slug: string;
   todas_areas: string[];
@@ -43,6 +49,8 @@ export type VagaPublicaLinha = {
   pcd: boolean;
   observacao: string | null;
   publicada_em: string;
+  /** false: vaga curada cuja fonte não informou prazo. */
+  prazo_informado: boolean;
 };
 
 /** Item de uma lista fixa (área, nível, modalidade, cidade). */
@@ -56,23 +64,31 @@ export type VagaCard = {
   empresaNome: string;
   logoUrl: string | null;
   iniciais: string;
-  /** "Pato Branco" ou "Remoto — empresa de Pato Branco". */
+  /** "Pato Branco" ou, na vaga só remota, "Remoto — empresa de Pato Branco". */
   local: string;
-  remota: boolean;
+  /** Todas as modalidades são remotas (o local já diz isso; o chip da modalidade some). */
+  somenteRemoto: boolean;
+  /** Alguma modalidade é remota: aparece em qualquer cidade filtrada. */
+  aceitaRemoto: boolean;
   cidadeSlug: string;
   cidadeNome: string;
-  modalidadeNome: string;
-  modalidadeSlug: string;
-  nivelNome: string;
-  nivelSlug: string;
-  contratoNome: string;
+  /** "Presencial" ou "Presencial ou Híbrido". */
+  modalidadeTexto: string;
+  modalidadesSlugs: string[];
+  /** "Júnior" ou "Júnior ou Pleno"; null quando a vaga não informa o nível. */
+  nivelTexto: string | null;
+  niveisSlugs: string[];
+  /** "CLT" ou "CLT ou PJ". */
+  contratoTexto: string;
   areaPrincipalNome: string;
   /** Área principal e secundárias, para o filtro de área. */
   areasSlugs: string[];
-  /** Linha amarela: o salário ou, sem salário, "Inscrições até ...". */
+  /** Linha amarela: o salário ou, sem salário, o prazo ("Inscrições até ..."). */
   destaque: string;
-  /** "Inscrições até ..." em linha própria quando o salário ocupa o destaque. */
+  /** O prazo em linha própria quando o salário ocupa o destaque. */
   prazo: string | null;
+  /** false: a fonte não informou prazo; o site não mostra a data de encerramento. */
+  prazoInformado: boolean;
   pcd: boolean;
   nova: boolean;
   encerraEm: string;
@@ -93,7 +109,7 @@ export type VagaCompleta = VagaCard & {
   salarioMin: number | null;
   salarioMax: number | null;
   cidadeUf: string;
-  contratoSlug: string;
+  contratosSlugs: string[];
   empresa: {
     descricao: string | null;
     site: string | null;
@@ -146,9 +162,27 @@ export function nomeDaCidade(nome: string, uf: string): string {
   return uf && uf !== "PR" ? `${nome} (${uf})` : nome;
 }
 
-/** Regra dos requisitos: a vaga remota aparece como "Remoto — empresa de [cidade]". */
-export function textoDoLocal(remota: boolean, cidade: string): string {
-  return remota ? `Remoto — empresa de ${cidade}` : cidade;
+/** Junta nomes como numa frase: "Júnior", "Júnior ou Pleno", "Júnior, Pleno ou Sênior". */
+export function juntarComOu(nomes: string[]): string | null {
+  if (nomes.length === 0) return null;
+  if (nomes.length === 1) return nomes[0];
+  return `${nomes.slice(0, -1).join(", ")} ou ${nomes[nomes.length - 1]}`;
+}
+
+/** Texto do prazo: a data ou, quando a fonte não informou, o aviso combinado com o Luan. */
+export const PRAZO_NAO_INFORMADO = "Prazo não informado, candidate-se logo";
+
+export function textoDoPrazo(encerraEm: string, prazoInformado: boolean): string {
+  return prazoInformado ? `Inscrições até ${formatarData(encerraEm)}` : PRAZO_NAO_INFORMADO;
+}
+
+/**
+ * Regra dos requisitos: a vaga remota aparece como "Remoto — empresa de [cidade]".
+ * Vale para a vaga só remota; a que também é presencial ou híbrida mostra a
+ * cidade, e o "Remoto" aparece junto das outras modalidades ("Híbrido ou Remoto").
+ */
+export function textoDoLocal(somenteRemoto: boolean, cidade: string): string {
+  return somenteRemoto ? `Remoto — empresa de ${cidade}` : cidade;
 }
 
 // ---------------------------------------------------------------------
@@ -163,7 +197,10 @@ export function textoDoLocal(remota: boolean, cidade: string): string {
 export function paraCard(linha: VagaPublicaLinha, areas: Map<string, ItemLista>, hoje: string): VagaCard {
   const cidade = nomeDaCidade(linha.cidade_nome, linha.cidade_uf);
   const salario = formatarSalario(linha.salario_min, linha.salario_max, linha.salario_a_combinar);
-  const inscricoes = `Inscrições até ${formatarData(linha.encerra_em)}`;
+  const inscricoes = textoDoPrazo(linha.encerra_em, linha.prazo_informado !== false);
+  const niveisNomes = linha.niveis_nomes ?? [];
+  const modalidadesNomes = linha.modalidades_nomes ?? [];
+  const contratosNomes = linha.contratos_nomes ?? [];
   const areasDaVaga = (linha.todas_areas ?? [])
     .map((id) => areas.get(id))
     .filter((a): a is ItemLista => Boolean(a));
@@ -175,19 +212,21 @@ export function paraCard(linha: VagaPublicaLinha, areas: Map<string, ItemLista>,
     empresaNome: linha.empresa_nome,
     logoUrl: urlDoLogo(linha.empresa_logo_path),
     iniciais: iniciais(linha.empresa_nome),
-    local: textoDoLocal(linha.modalidade_remota, cidade),
-    remota: linha.modalidade_remota,
+    local: textoDoLocal(linha.somente_remoto, cidade),
+    somenteRemoto: linha.somente_remoto,
+    aceitaRemoto: linha.aceita_remoto,
     cidadeSlug: linha.cidade_slug,
     cidadeNome: cidade,
-    modalidadeNome: linha.modalidade_nome,
-    modalidadeSlug: linha.modalidade_slug,
-    nivelNome: linha.nivel_nome,
-    nivelSlug: linha.nivel_slug,
-    contratoNome: linha.contrato_nome,
+    modalidadeTexto: juntarComOu(modalidadesNomes) ?? "",
+    modalidadesSlugs: linha.modalidades_slugs ?? [],
+    nivelTexto: juntarComOu(niveisNomes),
+    niveisSlugs: linha.niveis_slugs ?? [],
+    contratoTexto: juntarComOu(contratosNomes) ?? "",
     areaPrincipalNome: linha.area_principal_nome,
     areasSlugs: areasDaVaga.length ? areasDaVaga.map((a) => a.slug) : [linha.area_principal_slug],
     destaque: salario ?? inscricoes,
     prazo: salario ? inscricoes : null,
+    prazoInformado: linha.prazo_informado !== false,
     pcd: linha.pcd,
     nova: ehNova(linha.publicada_em, hoje),
     encerraEm: linha.encerra_em,
@@ -197,9 +236,9 @@ export function paraCard(linha: VagaPublicaLinha, areas: Map<string, ItemLista>,
         linha.cargo,
         linha.empresa_nome,
         cidade,
-        linha.modalidade_nome,
-        linha.nivel_nome,
-        linha.contrato_nome,
+        ...modalidadesNomes,
+        ...niveisNomes,
+        ...contratosNomes,
         ...areasDaVaga.map((a) => a.nome),
         linha.area_principal_nome,
         linha.requisitos,
@@ -226,7 +265,7 @@ export function paraVagaCompleta(
     salarioMin: numero(linha.salario_min),
     salarioMax: numero(linha.salario_max),
     cidadeUf: linha.cidade_uf,
-    contratoSlug: linha.contrato_slug,
+    contratosSlugs: linha.contratos_slugs ?? [],
     empresa: {
       descricao: linha.empresa_descricao,
       site: linha.empresa_site,
@@ -262,17 +301,20 @@ export type Ordem = (typeof ORDENS)[number]["valor"];
 /**
  * Aplica a busca e os filtros.
  * - Busca: todas as palavras digitadas precisam aparecer (sem acento).
- * - Cidade: vale para presencial e híbrido; a vaga remota aparece em
- *   qualquer cidade filtrada (regra dos requisitos).
+ * - Cidade: vale para presencial e híbrido; a vaga que aceita remoto
+ *   aparece em qualquer cidade filtrada (regra dos requisitos).
+ * - Modalidade, nível e contrato: qualquer uma das opções da vaga.
  * - Área: principal ou secundária.
+ * - Nível: qualquer um dos níveis da vaga. A vaga sem nível aparece só sem
+ *   filtro de nível ("Todos os níveis").
  */
 export function filtrar(vagas: VagaCard[], filtros: Filtros): VagaCard[] {
   const palavras = normalizar(filtros.q).split(" ").filter(Boolean);
   return vagas.filter(
     (v) =>
-      (!filtros.cidade || v.remota || v.cidadeSlug === filtros.cidade) &&
-      (!filtros.modalidade || v.modalidadeSlug === filtros.modalidade) &&
-      (!filtros.nivel || v.nivelSlug === filtros.nivel) &&
+      (!filtros.cidade || v.aceitaRemoto || v.cidadeSlug === filtros.cidade) &&
+      (!filtros.modalidade || v.modalidadesSlugs.includes(filtros.modalidade)) &&
+      (!filtros.nivel || v.niveisSlugs.includes(filtros.nivel)) &&
       (!filtros.area || v.areasSlugs.includes(filtros.area)) &&
       palavras.every((p) => v.busca.includes(p)),
   );
@@ -288,7 +330,9 @@ export function ordenar(vagas: VagaCard[], ordem: Ordem): VagaCard[] {
   return [...vagas].sort((a, b) => {
     let r = 0;
     if (ordem === "prazo") {
-      r = a.encerraEm === b.encerraEm ? 0 : a.encerraEm < b.encerraEm ? -1 : 1;
+      // Sem prazo informado vai para o fim: a data dela não é o prazo da empresa.
+      if (a.prazoInformado !== b.prazoInformado) r = a.prazoInformado ? -1 : 1;
+      else r = a.encerraEm === b.encerraEm ? 0 : a.encerraEm < b.encerraEm ? -1 : 1;
     } else if (ordem === "az" || ordem === "za") {
       r = a.cargo.localeCompare(b.cargo, "pt-BR", { sensitivity: "base", numeric: true });
       if (ordem === "za") r = -r;
@@ -334,8 +378,9 @@ export type OpcoesDeFiltro = {
 
 /**
  * Opções de cada filtro: só as que têm vaga no ar, na ordem das listas
- * fixas (cidades em ordem alfabética). Cidade sai só das vagas presenciais
- * e híbridas, porque a remota já aparece em qualquer cidade.
+ * fixas (cidades em ordem alfabética). Cidade sai só das vagas com alguma
+ * modalidade presencial ou híbrida, porque a só remota já aparece em
+ * qualquer cidade.
  */
 export function opcoesDeFiltro(
   vagas: VagaCard[],
@@ -344,9 +389,9 @@ export function opcoesDeFiltro(
   const cidades = new Map<string, string>();
   const usados = { modalidades: new Set<string>(), niveis: new Set<string>(), areas: new Set<string>() };
   for (const v of vagas) {
-    if (!v.remota) cidades.set(v.cidadeSlug, v.cidadeNome);
-    usados.modalidades.add(v.modalidadeSlug);
-    usados.niveis.add(v.nivelSlug);
+    if (!v.somenteRemoto) cidades.set(v.cidadeSlug, v.cidadeNome);
+    v.modalidadesSlugs.forEach((m) => usados.modalidades.add(m));
+    v.niveisSlugs.forEach((n) => usados.niveis.add(n));
     v.areasSlugs.forEach((a) => usados.areas.add(a));
   }
   const daLista = (lista: ItemLista[], usadas: Set<string>) =>

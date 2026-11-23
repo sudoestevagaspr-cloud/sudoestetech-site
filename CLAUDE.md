@@ -50,7 +50,9 @@ por empresa) e candidato (sem login).
   admin (empresa vira registro sem login; se depois pedir acesso, ativa-se o login e as vagas
   ficam ligadas a ela).
 - Obrigatórios: cargo, área principal, nível, contrato, modalidade, cidade, atividades,
-  requisitos, link de candidatura, data de encerramento.
+  requisitos, link de candidatura, data de encerramento. Nível, contrato e modalidade aceitam mais
+  de uma opção; na vaga curada, o nível pode ficar vazio e o prazo pode ser "não informado"
+  (decisões 26 e 27).
 - Opcionais: até 2 áreas secundárias (só para busca), salário (faixa ou "a combinar"), benefícios,
   PcD, como se candidatar, observação. Só curadas: fonte e data de conferência.
 - Status: ativa, encerrada pela empresa, expirada, removida pelo admin, suspensa.
@@ -62,7 +64,8 @@ por empresa) e candidato (sem login).
 **Listas fixas** (mantidas pelo admin): contratos, níveis, modalidades, áreas e cidades.
 
 **Busca e filtros:** texto (cargo, empresa, tecnologia); filtros de cidade, modalidade, nível e
-área. Vaga remota aparece em qualquer cidade filtrada e é exibida como "Remoto — empresa de [cidade]".
+área. Vaga que aceita remoto aparece em qualquer cidade filtrada; a só remota é exibida como
+"Remoto — empresa de [cidade]" (decisão 28).
 
 **Card e página:** logo opcional (sem logo, quadrado com iniciais); link próprio e legível
 (ex.: `/vagas/analista-de-ti-jr-unimed-pato-branco`) com prévia para WhatsApp e Instagram.
@@ -130,6 +133,18 @@ Respondidas no plano da Fase 2 (23/11/2026; plano em https://claude.ai/artifact/
 24. Termos de uso e política de privacidade: Claude escreve um rascunho na Fase 3 para o Luan revisar.
 25. Cache das páginas no R2 da Cloudflare (o checkout do R2 pode pedir cartão; o uso fica no grátis).
 
+Respondidas no cadastro das primeiras vagas reais (23/11/2026; também anotadas em `docs/requisitos.md`):
+
+26. Nível, contrato e modalidade aceitam mais de uma opção em qualquer vaga ("Júnior ou Pleno",
+    "CLT ou PJ", "Presencial ou Híbrido"). Contrato e modalidade: pelo menos um em toda vaga. Nível:
+    pelo menos um na vaga da empresa; a curada pode ficar sem nível (a fonte nem sempre informa), e
+    aí aparece só em "Todos os níveis".
+27. Vaga curada pode ter prazo não informado: o admin escolhe a data em que ela sai do ar, e o site
+    mostra "Prazo não informado, candidate-se logo" no lugar da data. Na vaga da empresa o prazo é
+    sempre informado.
+28. Vaga com alguma modalidade remota aparece no filtro de qualquer cidade. "Remoto — empresa de
+    [cidade]" só na vaga que é só remota; a "Híbrido ou Remoto" mostra a cidade.
+
 ## Banco de dados (Supabase)
 
 Guia da Fase 1 para o Luan: `docs/fase-1-banco.md`.
@@ -146,9 +161,12 @@ Guia da Fase 1 para o Luan: `docs/fase-1-banco.md`.
   O projeto foi criado com a liberação automática de tabelas novas para a API desligada, e a
   migration `20261123040900` faz o mesmo no banco local: sem `grant`, nem o servidor acessa a tabela.
 - **Projeto do Luan**: as 10 migrations da Fase 1 foram aplicadas em 23/11/2026, provavelmente
-  pelo SQL Editor (o guia ensina colar cada arquivo, na ordem), e os testes rodaram lá. Migration
+  pelo SQL Editor (o guia ensina colar cada arquivo, na ordem), e os testes rodaram lá. As da Fase 2
+  (`20261123050000` e `20261123060000`) foram pelo mesmo caminho, no guia `docs/fase-2-site.md`. Migration
   nova vai para ele com o link do arquivo e o mesmo passo a passo. Antes de usar `supabase db push`
   lá, conferir com `supabase migration list` e marcar as já aplicadas com `supabase migration repair`.
+  Migration que muda colunas da vitrine quebra o site no ar até o código novo ser publicado: mande
+  primeiro só a migration, espere o Luan aplicar e só depois publique o código (o build lê o banco).
 - **Travas por gatilho** (`t10_antes_de_gravar` em `empresas` e `vagas`): admin e empresa usam o
   mesmo papel `authenticated`, então quais colunas a empresa pode mudar é decidido no gatilho, por
   uma lista de colunas permitidas. `privado.tem_acesso_total()` = admin, service_role, SQL Editor ou
@@ -157,6 +175,13 @@ Guia da Fase 1 para o Luan: `docs/fase-1-banco.md`.
   `rpc('publicar_vaga', { dados })`, que registra a tentativa em `limite_atingido` e devolve a mensagem.
 - **Vitrine**: o site público lê só a visão `vagas_publicas`, que roda com a permissão do dono
   (`security_invoker = false`) de propósito. Não troque para `security_invoker = true`.
+- **Listas da vaga** (migration `20261123060000`): `niveis`, `contratos` e `modalidades` são listas
+  de ids (`uuid[]`), como `areas_secundarias`. O gatilho t10 confere cada id (existe e está ativo) e
+  guarda as listas sem repetidos e em ordem. A vitrine traz `niveis_nomes`/`niveis_slugs` (e o mesmo
+  para contratos e modalidades) na ordem das listas fixas, mais `aceita_remoto` e `somente_remoto`.
+  `prazo_informado = false` só em vaga curada (check `vagas_prazo_obrigatorio_fora_das_curadas`).
+- **Link da vaga** (`privado.gerar_slug_vaga`): cargo + empresa + cidade, sem repetir a cidade quando
+  ela já está no nome da empresa (`analista-de-ti-jr-unimed-pato-branco`). Depois de publicado, não muda.
 - **Datas** sempre com `privado.hoje()` (horário de Brasília). A vaga fica no ar até o fim do dia
   `encerra_em`.
 - **Nada é apagado**: sem DELETE em vagas; exclusão de conta é `rpc('excluir_conta_empresa')`, que
@@ -189,7 +214,10 @@ Guia da Fase 2 para o Luan: `docs/fase-2-site.md` (Cloudflare, Vault e roteiro d
   supabase-js por enquanto. **No navegador** (`lib/api-navegador.ts`): `rpc/registrar_metrica`
   (uma vez por dia por vaga, marca no localStorage, sem cookie) e `insert` em `reports`.
 - **Busca, filtros e ordem** rodam no navegador sobre a lista inteira (`lib/vagas.ts`) e vão para o
-  endereço (`/?cidade=...&nivel=...&q=...&ordem=...`).
+  endereço (`/?cidade=...&nivel=...&q=...&ordem=...`). Nível e modalidade casam com qualquer opção da
+  vaga; as opções viram texto com `juntarComOu` ("CLT ou PJ"). Vaga sem prazo informado vai para o fim
+  em "Prazo mais próximo" e não manda `validThrough` ao Google; vaga com vários contratos manda
+  `employmentType` como lista.
 - **Variáveis**: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` e
   `NEXT_PUBLIC_SITE_URL` entram no código na hora do build (na Cloudflare: variáveis de build);
   `REVALIDAR_SEGREDO` é segredo do Worker (variável de execução). Modelo em `.env.example`; no

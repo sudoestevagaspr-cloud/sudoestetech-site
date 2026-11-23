@@ -47,7 +47,8 @@ e clique em **Run**. A primeira linha deve ser:
 RESUMO: 86 de 86 testes passaram
 ```
 
-Os 6 testes novos conferem o aviso ao site. Como sempre, o script desfaz tudo o que cria.
+Os 6 testes novos conferem o aviso ao site. Como sempre, o script desfaz tudo o que cria. (Esse era
+o total antes do arquivo do [passo 9](#passo-9-cadastrar-2-ou-3-vagas); depois dele, são 94.)
 
 **Se der erro:** se a mensagem falar de `pg_cron` ou de permissão, ligue a extensão pelo painel e
 rode o arquivo de novo: menu da esquerda **Integrations** > **Cron** > **Enable** (ou **Database** >
@@ -225,16 +226,16 @@ quando precisar trocar o endereço (na Fase 4, com `https://sudoestetech.com.br`
 
 1. Em [Workers & Pages](https://dash.cloudflare.com/?to=/:account/workers-and-pages), clique no
    Worker `sudoestetech-site`.
-2. Abra **Settings** e, em **Variables and Secrets**, clique em **Add**.
-3. Preencha:
-   - **Type:** `Secret` (criptografado; ninguém consegue ler depois, nem no painel)
-   - **Variable name:** `REVALIDAR_SEGREDO`
+2. Abra **Settings** e, em **Runtime variables and secrets**, clique em **+ Add variable**.
+3. Na janela **Add environment variable**, preencha:
+   - **Key:** `REVALIDAR_SEGREDO`
    - **Value:** o código do passo 6
-4. Clique em **Deploy**.
+   - Marque **Secret** (criptografado; ninguém consegue ler depois, nem no painel).
+4. Clique em **Add variable and deploy**.
 
-**Atenção:** este é um segredo de execução, em **Variables and Secrets**. Ele **não** vai em
-**Build variables and secrets** (as do passo 5): as variáveis de build não existem enquanto o site
-está rodando.
+**Atenção:** este é um segredo de execução, em **Runtime variables and secrets**. Ele **não** vai
+nas variáveis de build (as do passo 5, em **Build**): as variáveis de build não existem enquanto o
+site está rodando.
 
 Opcional: em **Settings** > **Build** > **Branch control**, se aparecer uma opção de builds de
 outras branches (**non-production branch builds** ou **Preview Builds**), desmarque e salve. Se não
@@ -278,6 +279,17 @@ build com erro e um e-mail da Cloudflare, sem afetar o site.
 
 O painel do admin só chega na Fase 4. Até lá, as vagas entram pelo SQL Editor, com o modelo abaixo.
 
+**Antes, o segundo arquivo do banco** (decisões 26 a 28: mais de uma opção em nível, contrato e
+modalidade; nível e prazo opcionais nas vagas curadas):
+
+1. Copie [`supabase/migrations/20261123060000_vagas_varias_opcoes.sql`](../supabase/migrations/20261123060000_vagas_varias_opcoes.sql)
+   (**Copy raw file**), cole numa query nova do SQL Editor e clique em **Run**. No aviso de operação
+   destrutiva, confirme: o arquivo troca as colunas antigas de nível, contrato e modalidade pelas
+   novas, copiando os dados antes. **Esperado:** `Success. No rows returned`.
+2. Rode os testes de novo ([`supabase/tests/testes_seguranca.sql`](../supabase/tests/testes_seguranca.sql)).
+   **Esperado:** `RESUMO: 94 de 94 testes passaram`.
+3. Só depois disso o código novo do site é publicado: ele lê as colunas novas.
+
 **Sugestão:** use 2 ou 3 vagas **reais** que estão no site antigo. Elas ficam valendo como vagas
 curadas (os requisitos pedem para o admin recadastrar as vagas atuais assim), e vagas nunca são
 apagadas. Se quiser uma vaga de mentira para testar, tudo bem: no fim do teste ela sai do ar
@@ -304,17 +316,17 @@ where not exists (select 1 from public.empresas where nome_fantasia = 'Nome da E
 -- 3. A vaga
 insert into public.vagas (
   empresa_id, origem, cargo,
-  area_principal_id, nivel_id, contrato_id, modalidade_id, cidade_id,
-  atividades, requisitos, link_candidatura, encerra_em,
+  area_principal_id, niveis, contratos, modalidades, cidade_id,
+  atividades, requisitos, link_candidatura, encerra_em, prazo_informado,
   salario_min, salario_max, salario_a_combinar, beneficios, fonte, conferida_em
 ) values (
   (select id from public.empresas where nome_fantasia = 'Nome da Empresa' limit 1),  -- <- mesmo nome
   'curada',
   'Analista de Suporte Júnior',                                            -- <- cargo
   (select id from public.areas where slug = 'suporte-tecnico-e-help-desk'), -- <- área (lista abaixo)
-  (select id from public.niveis where slug = 'junior'),                    -- <- nível
-  (select id from public.contratos where slug = 'clt'),                    -- <- contrato
-  (select id from public.modalidades where slug = 'presencial'),           -- <- modalidade
+  array(select id from public.niveis where slug in ('junior')),            -- <- níveis (um ou mais; '{}' = sem nível)
+  array(select id from public.contratos where slug in ('clt')),            -- <- contratos (um ou mais)
+  array(select id from public.modalidades where slug in ('presencial')),   -- <- modalidades (uma ou mais)
   (select id from public.cidades where slug = 'pato-branco'),              -- <- cidade
   'Atender chamados dos usuários
 Instalar e configurar computadores',            -- <- atividades (uma por linha)
@@ -322,6 +334,7 @@ Instalar e configurar computadores',            -- <- atividades (uma por linha)
 Vontade de aprender',                           -- <- requisitos (um por linha)
   'https://www.site-da-empresa.com.br/vagas',  -- <- link de candidatura (https:// ou mailto:)
   date '2026-12-20',                           -- <- encerra em (até 90 dias a partir de hoje)
+  true,                                        -- <- false = "Prazo não informado" (sai do ar na data acima)
   2500, 3000, false,                           -- <- salário mínimo, máximo, "a combinar"
   'Vale-alimentação',                          -- <- benefícios (ou null)
   'Instagram da empresa',                      -- <- fonte (ou null)
@@ -331,6 +344,12 @@ Vontade de aprender',                           -- <- requisitos (um por linha)
 
 Dicas para preencher:
 
+- **Mais de uma opção:** separe por vírgula dentro do `in (...)`, por exemplo
+  `slug in ('junior', 'pleno')` ou `slug in ('clt', 'pj')`. A vaga aparece como "Júnior ou Pleno".
+- **Sem nível** (só em vaga curada): troque a linha dos níveis por `'{}',`. Se o nível ficar vazio
+  sem você querer, confira se o slug está escrito igual à lista abaixo.
+- **Prazo não informado** (só em vaga curada): escolha a data em que a vaga sai do ar e troque o
+  `true` por `false`. O site mostra "Prazo não informado, candidate-se logo" no lugar da data.
 - **Salário:** faixa = `2500, 3000, false`; só "a partir de" = `2500, null, false`; a combinar =
   `null, null, true`; não informado = `null, null, false`.
 - **Apóstrofo no texto** (como em "d'água"): escreva dois apóstrofos seguidos (`d''água`).
@@ -357,6 +376,8 @@ Use o celular e o computador. Em cada item, o que deve acontecer:
 
 1. **Lista.** Abra o endereço do site. As vagas aparecem, as mais novas primeiro, com o selo
    **Nova** nas publicadas há menos de 7 dias. Vaga remota aparece como "Remoto — empresa de [cidade]".
+   Vaga curada sem nível não mostra o nível; sem prazo informado, mostra "Prazo não informado,
+   candidate-se logo" no lugar da data.
 2. **Busca e filtros.** Busque por um cargo, uma empresa e uma tecnologia, com e sem acento. No
    celular, os filtros abrem no botão **Filtros**. Filtre por cidade: as vagas remotas aparecem em
    qualquer cidade. Troque a ordem (prazo, A a Z). O endereço da página muda junto: copie e abra

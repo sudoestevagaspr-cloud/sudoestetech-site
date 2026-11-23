@@ -28,12 +28,12 @@ const COLUNAS = [
   "empresa_nome", "empresa_logo_path", "empresa_descricao", "empresa_site",
   "empresa_linkedin", "empresa_instagram",
   "cidade_nome", "cidade_uf", "cidade_slug",
-  "modalidade_nome", "modalidade_slug", "modalidade_remota",
-  "nivel_nome", "nivel_slug", "contrato_nome", "contrato_slug",
+  "modalidades_nomes", "modalidades_slugs", "aceita_remoto", "somente_remoto",
+  "niveis_nomes", "niveis_slugs", "contratos_nomes", "contratos_slugs",
   "area_principal_nome", "area_principal_slug", "todas_areas",
   "atividades", "requisitos", "link_candidatura", "como_se_candidatar",
   "encerra_em", "salario_min", "salario_max", "salario_a_combinar",
-  "beneficios", "pcd", "observacao", "publicada_em",
+  "beneficios", "pcd", "observacao", "publicada_em", "prazo_informado",
 ].join(",");
 
 async function lerDaApi<T>(caminho: string): Promise<T> {

@@ -13,7 +13,7 @@ import { lerVaga } from "@/lib/dados";
 import { formatarData, diaEmBrasilia } from "@/lib/datas";
 import { jsonParaScript, vagaParaGoogle } from "@/lib/google";
 import { resumir } from "@/lib/texto";
-import type { VagaCompleta } from "@/lib/vagas";
+import { textoDoPrazo, type VagaCompleta } from "@/lib/vagas";
 
 // Nenhuma vaga é montada no build: cada página é montada na primeira visita
 // e guardada em cache até o banco avisar que algo mudou.
@@ -29,10 +29,10 @@ function tituloDaVaga(vaga: VagaCompleta): string {
 
 /** Texto da prévia: cidade, nível, contrato e prazo (decisão do plano: cidade e nível na descrição). */
 function descricaoDaVaga(vaga: VagaCompleta): string {
-  const partes = [vaga.local, vaga.nivelNome, vaga.contratoNome];
-  if (!vaga.remota) partes.push(vaga.modalidadeNome);
+  const partes = [vaga.local, vaga.nivelTexto, vaga.contratoTexto].filter((p): p is string => Boolean(p));
+  if (!vaga.somenteRemoto) partes.push(vaga.modalidadeTexto);
   const salario = vaga.salario ? ` ${vaga.salario}.` : "";
-  return resumir(`${partes.join(" · ")}.${salario} Inscrições até ${formatarData(vaga.encerraEm)}.`, 200);
+  return resumir(`${partes.join(" · ")}.${salario} ${textoDoPrazo(vaga.encerraEm, vaga.prazoInformado)}.`, 200);
 }
 
 export async function generateMetadata({ params }: PageProps<"/vagas/[slug]">): Promise<Metadata> {
@@ -67,7 +67,7 @@ export default async function PaginaDaVaga({ params }: PageProps<"/vagas/[slug]"
 
   const url = `${urlDoSite()}/vagas/${vaga.slug}`;
   const publicadaEm = formatarData(diaEmBrasilia(vaga.publicadaEm));
-  const encerraEm = formatarData(vaga.encerraEm);
+  const prazo = textoDoPrazo(vaga.encerraEm, vaga.prazoInformado);
   const linkSeguro = (link: string | null) => (link && /^https?:\/\//i.test(link) ? link : null);
   const redes = [
     { nome: "Site", link: linkSeguro(vaga.empresa.site) },
@@ -104,9 +104,9 @@ export default async function PaginaDaVaga({ params }: PageProps<"/vagas/[slug]"
               <Icone nome="local" className="size-3.5 text-ciano" />
               {vaga.local}
             </li>
-            {!vaga.remota && <li className="chip">{vaga.modalidadeNome}</li>}
-            <li className="chip">{vaga.nivelNome}</li>
-            <li className="chip">{vaga.contratoNome}</li>
+            {!vaga.somenteRemoto && <li className="chip">{vaga.modalidadeTexto}</li>}
+            {vaga.nivelTexto && <li className="chip">{vaga.nivelTexto}</li>}
+            <li className="chip">{vaga.contratoTexto}</li>
             {vaga.pcd && <li className="chip">Também para PcD</li>}
           </ul>
 
@@ -152,7 +152,7 @@ export default async function PaginaDaVaga({ params }: PageProps<"/vagas/[slug]"
           </div>
 
           <p className="text-[13px] text-apoio">
-            Publicada em {publicadaEm} · Inscrições até {encerraEm}
+            Publicada em {publicadaEm} · {prazo}
           </p>
         </article>
 

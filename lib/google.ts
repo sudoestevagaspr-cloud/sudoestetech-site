@@ -15,6 +15,13 @@ const TIPOS_DE_EMPREGO: Record<string, string> = {
   temporario: "TEMPORARY",
 };
 
+/** Um tipo só vai como texto; mais de um (ex.: "CLT ou PJ"), como lista, que o Google também aceita. */
+function tiposDeEmprego(contratos: string[]): string | string[] {
+  const tipos = [...new Set(contratos.map((slug) => TIPOS_DE_EMPREGO[slug] ?? "OTHER"))];
+  if (tipos.length === 0) return "OTHER";
+  return tipos.length === 1 ? tipos[0] : tipos;
+}
+
 function escaparHtml(texto: string): string {
   return texto.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
@@ -44,9 +51,11 @@ export function vagaParaGoogle(vaga: VagaCompleta, url: string): Record<string, 
     identifier: { "@type": "PropertyValue", name: SITE.nome, value: vaga.id },
     url,
     datePosted: vaga.publicadaEm,
-    // A vaga fica no ar até o fim do dia de encerramento, em Brasília.
-    validThrough: `${vaga.encerraEm}T23:59:59-03:00`,
-    employmentType: TIPOS_DE_EMPREGO[vaga.contratoSlug] ?? "OTHER",
+    // A vaga fica no ar até o fim do dia de encerramento, em Brasília. Sem
+    // prazo informado pela fonte, o Google não recebe data (a data da vaga
+    // é só quando ela sai do nosso site, não o prazo da empresa).
+    ...(vaga.prazoInformado ? { validThrough: `${vaga.encerraEm}T23:59:59-03:00` } : {}),
+    employmentType: tiposDeEmprego(vaga.contratosSlugs),
     directApply: false,
     hiringOrganization: {
       "@type": "Organization",
@@ -62,11 +71,15 @@ export function vagaParaGoogle(vaga: VagaCompleta, url: string): Record<string, 
     addressRegion: vaga.cidadeUf,
     addressCountry: "BR",
   };
-  if (vaga.remota) {
+  // Para o Google, TELECOMMUTE é trabalho 100% remoto (híbrido não conta).
+  // A vaga que pode ser remota ou presencial/híbrida leva os dois: o
+  // endereço e o TELECOMMUTE.
+  if (!vaga.somenteRemoto) {
+    dados.jobLocation = { "@type": "Place", address: endereco };
+  }
+  if (vaga.aceitaRemoto) {
     dados.jobLocationType = "TELECOMMUTE";
     dados.applicantLocationRequirements = { "@type": "Country", name: "Brasil" };
-  } else {
-    dados.jobLocation = { "@type": "Place", address: endereco };
   }
 
   if (vaga.salarioMin !== null || vaga.salarioMax !== null) {

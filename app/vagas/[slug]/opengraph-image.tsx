@@ -104,7 +104,7 @@ export default async function ImagemDaVaga({ params }: { params: Promise<{ slug:
 
         {vaga && (
           <div style={{ display: "flex", gap: 16 }}>
-            {[vaga.local, vaga.nivelNome].map((texto) => (
+            {[vaga.local, vaga.nivelTexto].filter((t): t is string => Boolean(t)).map((texto) => (
               <div
                 key={texto}
                 style={{
