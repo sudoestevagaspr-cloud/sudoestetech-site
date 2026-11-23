@@ -105,6 +105,13 @@ Respondidas no plano da Fase 1 (23/11/2026):
 9. Redes sociais da empresa: LinkedIn e Instagram.
 10. O admin pode liberar mais vagas para uma empresa pelo limite personalizado, mesmo sem planos pagos.
 
+Confirmadas no fim da Fase 1 (23/11/2026):
+
+11. A vaga fica no ar até o fim do dia de encerramento, no horário de Brasília.
+12. Na exclusão de conta ficam nome fantasia, razão social e CNPJ; e-mail e telefone são apagados.
+13. Fonte e data de conferência são opcionais nas vagas curadas.
+14. O link de candidatura aceita `https://`, `http://` e `mailto:`.
+
 ## Banco de dados (Supabase)
 
 Guia da Fase 1 para o Luan: `docs/fase-1-banco.md`.
@@ -120,9 +127,10 @@ Guia da Fase 1 para o Luan: `docs/fase-1-banco.md`.
   para `anon`/`authenticated`/`service_role` e políticas. Visitante não lê tabelas internas.
   O projeto foi criado com a liberação automática de tabelas novas para a API desligada, e a
   migration `20261123040900` faz o mesmo no banco local: sem `grant`, nem o servidor acessa a tabela.
-- **Projeto do Luan**: as migrations 1 a 9 foram aplicadas em 23/11/2026, provavelmente pelo SQL
-  Editor (o guia ensina colar cada arquivo, na ordem). Antes de usar `supabase db push` lá,
-  conferir com `supabase migration list` e marcar as já aplicadas com `supabase migration repair`.
+- **Projeto do Luan**: as 10 migrations da Fase 1 foram aplicadas em 23/11/2026, provavelmente
+  pelo SQL Editor (o guia ensina colar cada arquivo, na ordem), e os testes rodaram lá. Migration
+  nova vai para ele com o link do arquivo e o mesmo passo a passo. Antes de usar `supabase db push`
+  lá, conferir com `supabase migration list` e marcar as já aplicadas com `supabase migration repair`.
 - **Travas por gatilho** (`t10_antes_de_gravar` em `empresas` e `vagas`): admin e empresa usam o
   mesmo papel `authenticated`, então quais colunas a empresa pode mudar é decidido no gatilho, por
   uma lista de colunas permitidas. `privado.tem_acesso_total()` = admin, service_role, SQL Editor ou
@@ -138,10 +146,11 @@ Guia da Fase 1 para o Luan: `docs/fase-1-banco.md`.
 
 ## Fases
 
-- [ ] **Fase 1: modelagem do banco no Supabase** (tabelas, relacionamentos, listas fixas, planos
+- [x] Fase 1: modelagem do banco no Supabase (tabelas, relacionamentos, listas fixas, planos
   com limite personalizado por empresa) e políticas de Row Level Security.
-  ← **fase atual: implementada, aguardando o teste do Luan**
-- [ ] Fase 2: site público com listagem, busca, filtros e página de cada vaga com link próprio.
+  Concluída em 23/11/2026, depois do teste do Luan no projeto dele.
+- [ ] **Fase 2: site público** com listagem, busca, filtros e página de cada vaga com link próprio.
+  ← **fase atual: plano em preparação, aguardando a aprovação do Luan**
 - [ ] Fase 3: pré-cadastro e painel da empresa.
 - [ ] Fase 4: painel do admin.
 - [ ] Fase 5: e-mails automáticos e tarefas agendadas.
