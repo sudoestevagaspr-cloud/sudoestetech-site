@@ -89,10 +89,53 @@ por empresa) e candidato (sem login).
 **Fora da v1:** cursos e eventos, banco de talentos, vários logins por empresa, desenvolvimento
 quebrado em especialidades, planos pagos e vaga em destaque.
 
+## Decisões do Luan (complementam os requisitos)
+
+Respondidas no plano da Fase 1 (23/11/2026):
+
+1. CNPJ obrigatório no pré-cadastro; opcional na empresa de vaga curada (exigido quando ela pedir login).
+2. Ao reativar uma empresa suspensa, as vagas voltam ao ar se estiverem no prazo e couberem no limite.
+3. Empresa recusada pode fazer novo pré-cadastro com o mesmo CNPJ; o pedido recusado fica guardado.
+4. Report: motivo de uma lista (golpe ou vaga falsa, já preenchida, link quebrado, informação errada,
+   conteúdo discriminatório, outro) + texto opcional. Não pede e-mail do candidato.
+5. Data de encerramento: no máximo 90 dias depois da publicação; a empresa pode adiar dentro desse máximo.
+6. Vaga encerrada ou expirada não volta ao ar; a empresa duplica e publica uma nova.
+7. O link (slug) da vaga fica fixo depois de publicado.
+8. Salário em reais, mensal, com três situações: faixa, "a combinar" ou não informado.
+9. Redes sociais da empresa: LinkedIn e Instagram.
+10. O admin pode liberar mais vagas para uma empresa pelo limite personalizado, mesmo sem planos pagos.
+
+## Banco de dados (Supabase)
+
+Guia da Fase 1 para o Luan: `docs/fase-1-banco.md`.
+
+- **Migrations** em `supabase/migrations/`, em ordem pelo nome. Nunca altere uma migration já
+  aplicada: crie outra. Dados das listas fixas ficam em migration; `supabase/seed.sql` é só para o banco local.
+- **Testes** em `supabase/tests/testes_seguranca.sql` (roda no SQL Editor do Supabase ou com
+  `npm run db:test` no banco local, que sobe com `npm run db:start`). Toda regra nova de acesso
+  ganha um teste ali. O script desfaz tudo o que cria.
+- **Schema `privado`**: funções auxiliares (não expostas na API). `privado.eh_admin()` exige login
+  com duas etapas (`aal2` no token). `privado.minha_empresa_id()` devolve vazio se a empresa não está ativa.
+- **Toda tabela nova**: `enable row level security` logo após o `create table`, `grant` explícito
+  para `anon`/`authenticated` e políticas. Visitante não lê tabelas internas.
+- **Travas por gatilho** (`t10_antes_de_gravar` em `empresas` e `vagas`): admin e empresa usam o
+  mesmo papel `authenticated`, então quais colunas a empresa pode mudar é decidido no gatilho, por
+  uma lista de colunas permitidas. `privado.tem_acesso_total()` = admin, service_role, SQL Editor ou
+  função do banco.
+- **Limite de vagas**: gatilho `t20_checar_limite` (erro `ST001`). O site publica por
+  `rpc('publicar_vaga', { dados })`, que registra a tentativa em `limite_atingido` e devolve a mensagem.
+- **Vitrine**: o site público lê só a visão `vagas_publicas`, que roda com a permissão do dono
+  (`security_invoker = false`) de propósito. Não troque para `security_invoker = true`.
+- **Datas** sempre com `privado.hoje()` (horário de Brasília). A vaga fica no ar até o fim do dia
+  `encerra_em`.
+- **Nada é apagado**: sem DELETE em vagas; exclusão de conta é `rpc('excluir_conta_empresa')`, que
+  apaga contato e login. Arquivos do Storage são apagados pela API do Storage, não por SQL.
+
 ## Fases
 
 - [ ] **Fase 1: modelagem do banco no Supabase** (tabelas, relacionamentos, listas fixas, planos
-  com limite personalizado por empresa) e políticas de Row Level Security. ← **fase atual (planejamento)**
+  com limite personalizado por empresa) e políticas de Row Level Security.
+  ← **fase atual: implementada, aguardando o teste do Luan**
 - [ ] Fase 2: site público com listagem, busca, filtros e página de cada vaga com link próprio.
 - [ ] Fase 3: pré-cadastro e painel da empresa.
 - [ ] Fase 4: painel do admin.
