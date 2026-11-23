@@ -141,7 +141,7 @@ Daqui em diante, cada mudança que eu enviar para o GitHub é publicada sozinha.
    | Campo | O que colocar |
    | --- | --- |
    | Nome do projeto (**Project name** / nome do Worker) | `sudoestetech-site` (exatamente assim: é o nome que está no `wrangler.jsonc`; com outro nome o build falha) |
-   | Branch (**Git branch** / **Production branch**) | `claude/project-thread-x7ufao` (a branch do PR; assim você testa antes de juntar no `main`) |
+   | Branch (**Git branch** / **Production branch**), se aparecer | `claude/project-thread-x7ufao` (a branch do PR; assim você testa antes de juntar no `main`). Se o formulário não tiver esse campo, tudo bem: o item 8 troca a branch depois |
    | **Build command** | `npx opennextjs-cloudflare build` |
    | **Deploy command** | `npx opennextjs-cloudflare deploy` |
    | Comando de prévia (**Preview command** / non-production) | deixe como está (vamos desligar as prévias no passo 7) |
@@ -160,6 +160,14 @@ Daqui em diante, cada mudança que eu enviar para o GitHub é publicada sozinha.
    Confira se não sobrou espaço no começo ou no fim dos valores.
 6. Clique em **Save and Deploy** (ou **Deploy**).
 7. Abre a tela do build, com o registro (log) rolando. Leva de 3 a 6 minutos.
+8. Confira a branch: no Worker `sudoestetech-site`, abra **Settings** > **Build** >
+   **Branch control**, clique no lápis ✏️, escolha `claude/project-thread-x7ufao` como branch de
+   produção e clique em **Save**. Não mexa no **Root directory**.
+
+   Se a Cloudflare montou o `main` (o formulário pode não perguntar a branch), o primeiro build
+   falha com `npm error could not determine executable to run`. É normal: o `main` ainda não tem o
+   site. Depois de trocar a branch, o build seguinte começa sozinho na próxima atualização que eu
+   mandar para o GitHub (o **Retry build** repete o build antigo, do `main`).
 
 **Resultado esperado:** o build termina com sucesso (✓ verde). Perto do fim do log aparecem linhas
 como `OpenNext build complete`, `Populating remote R2 incremental cache`, `Creating D1 table if
@@ -174,6 +182,8 @@ erros mais comuns:
 - erro com `bucket` ou `sudoestetech-cache`: o nome do bucket do passo 2 está diferente.
 - erro com `D1` ou `sudoestetech-cache-tags`: o nome do banco do passo 3 está diferente.
 - erro com o nome do Worker: o nome do projeto não é `sudoestetech-site`.
+- `could not determine executable to run`, logo depois de `added 9 packages`: o build usou o `main`.
+  Troque a branch como no item 8.
 
 **Para rodar o build de novo sem mudar nada no GitHub:** abra o Worker `sudoestetech-site` >
 **Deployments** > **View Build History** (no pé da página) > nos três pontinhos do build, **Retry build**.
@@ -218,13 +228,10 @@ quando precisar trocar o endereço (na Fase 4, com `https://sudoestetech.com.br`
 **Build variables and secrets** (as do passo 5): as variáveis de build não existem enquanto o site
 está rodando.
 
-Ainda em **Settings**, desligue as prévias de outras branches:
-
-5. Abra **Build** > **Branch control**.
-6. Desmarque **Enable Preview Builds** e salve (**Save**).
-
-Por quê: com isso ligado, a Cloudflare tentaria montar também o `main`, que ainda não tem o site, e
-mandaria e-mails de build com erro.
+Opcional: em **Settings** > **Build** > **Branch control**, se aparecer uma opção de builds de
+outras branches (**non-production branch builds** ou **Preview Builds**), desmarque e salve. Se não
+aparecer, deixe como está. Com ela ligada, uma mudança no `main` antes de juntar o PR geraria um
+build com erro e um e-mail da Cloudflare, sem afetar o site.
 
 ---
 
@@ -468,6 +475,7 @@ não dependem dele, então dá para trocar no futuro se valer a pena.
 | Problema | O que fazer |
 | --- | --- |
 | Build falhou | Copie as últimas 30 linhas do log e me mande (veja o passo 5). |
+| Build falhou com `could not determine executable to run` | A Cloudflare montou o `main`. Troque a branch (passo 5, item 8). |
 | Site abre com "Não conseguimos carregar as vagas" | Confira as variáveis do passo 5 (endereço e chave do Supabase). Depois de corrigir, rode o build de novo (**Retry build**). |
 | Mudei uma vaga e o site não mudou | Rode a conferência do passo 8 e me mande o resultado. |
 | A prévia do WhatsApp não aparece | O WhatsApp guarda prévias por um tempo. Teste com uma vaga que você ainda não mandou. Se continuar sem prévia, me mande o link. |
