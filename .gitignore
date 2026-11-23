@@ -1,0 +1,11 @@
+# Dependências
+node_modules/
+
+# Variáveis de ambiente: nunca vão para o repositório
+.env
+.env.*
+!.env.example
+
+# Sistema
+.DS_Store
+Thumbs.db

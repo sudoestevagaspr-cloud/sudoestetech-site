@@ -1,0 +1,16 @@
+{
+  "name": "sudoestetech-site",
+  "private": true,
+  "description": "Site de vagas de TI da Sudoeste Tech",
+  "scripts": {
+    "db:start": "supabase start -x imgproxy,edge-runtime,logflare,vector,realtime,supavisor",
+    "db:stop": "supabase stop",
+    "db:reset": "supabase db reset",
+    "db:test": "docker exec -i supabase_db_sudoestetech-site psql -U postgres -d postgres -X -q -P pager=off < supabase/tests/testes_seguranca.sql",
+    "db:lint": "supabase db lint --level warning",
+    "db:push": "supabase db push"
+  },
+  "devDependencies": {
+    "supabase": "2.122.1"
+  }
+}
