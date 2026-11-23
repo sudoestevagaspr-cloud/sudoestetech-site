@@ -135,6 +135,14 @@ Daqui em diante, cada mudança que eu enviar para o GitHub é publicada sozinha.
    - escolha a conta **sudoestevagaspr-cloud**;
    - marque **Only select repositories** e escolha `sudoestetech-site`;
    - clique em **Install & Authorize** (ou **Save**).
+
+   Se a janela não abrir, o aplicativo da Cloudflare já estava instalado no GitHub (para o site
+   antigo) e pode não enxergar o repositório novo. Confira antes de seguir: abra
+   <https://github.com/settings/installations> (logado como **sudoestevagaspr-cloud**) >
+   **Cloudflare Workers and Pages** > **Configure**. Em **Repository access**, a lista precisa ter
+   `sudoestetech-site` **e** `sudoestevagaspr-cloud.github.io` (o site antigo; não tire). Se faltar o
+   novo, adicione em **Select repositories** e clique em **Save**. Nunca use **Uninstall**: isso
+   desliga também o site antigo.
 3. Na lista de repositórios, escolha `sudoestetech-site`.
 4. Preencha o formulário assim:
 
@@ -476,6 +484,7 @@ não dependem dele, então dá para trocar no futuro se valer a pena.
 | --- | --- |
 | Build falhou | Copie as últimas 30 linhas do log e me mande (veja o passo 5). |
 | Build falhou com `could not determine executable to run` | A Cloudflare montou o `main`. Troque a branch (passo 5, item 8). |
+| Mandei uma atualização e nenhum build começou; em **Settings** > **Build** aparece "This project is disconnected from your Git account" | O aplicativo da Cloudflare no GitHub não tem acesso ao repositório `sudoestetech-site`. Adicione o repositório como no passo 5, item 2, e me avise para eu mandar outra atualização. |
 | Site abre com "Não conseguimos carregar as vagas" | Confira as variáveis do passo 5 (endereço e chave do Supabase). Depois de corrigir, rode o build de novo (**Retry build**). |
 | Mudei uma vaga e o site não mudou | Rode a conferência do passo 8 e me mande o resultado. |
 | A prévia do WhatsApp não aparece | O WhatsApp guarda prévias por um tempo. Teste com uma vaga que você ainda não mandou. Se continuar sem prévia, me mande o link. |
